@@ -901,6 +901,12 @@
                     </div>
                 </div>
 
+                <!-- Кнопка Анализа -->
+                <button class="action-btn" id="getWeatherBtn" onclick="getWeather()" style="margin-bottom: 14px;">
+                    <i class="fas fa-cloud-showers-heavy"></i>
+                    <span>Анализ</span>
+                </button>
+
                 <!-- Статус полёта -->
                 <div class="flight-status status-allowed" id="flightStatus">
                     <i class="fas fa-check-circle"></i>
@@ -955,12 +961,6 @@
                     <div class="flight-windows" id="flightWindows"></div>
                 </div>
 
-                <!-- Кнопка -->
-                <button class="action-btn" id="getWeatherBtn" onclick="getWeather()">
-                    <i class="fas fa-cloud-showers-heavy"></i>
-                    <span>Получить погоду</span>
-                </button>
-
                 <!-- Рекомендации и выводы -->
                 <div class="recommendations-block" id="recommendationsBlock">
                     <div class="recommendations-header">
@@ -970,7 +970,7 @@
                     <div class="recommendations-content" id="recommendationsContent">
                         <div class="recommendation-placeholder">
                             <i class="fas fa-info-circle"></i>
-                            <span>Нажмите «Получить погоду» для анализа</span>
+                            <span>Нажмите «Анализ» для получения данных</span>
                         </div>
                     </div>
                 </div>
@@ -2950,7 +2950,7 @@
                 container.innerHTML = `
                     <div class="recommendation-placeholder">
                         <i class="fas fa-info-circle"></i>
-                        <span>Нажмите «Получить погоду» для анализа</span>
+                        <span>Нажмите «Анализ» для получения данных</span>
                     </div>
                 `;
                 return;
