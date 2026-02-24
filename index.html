@@ -1393,12 +1393,232 @@
             // Рисуем промежуточный маршрут
             if (routePoints.length >= 2) {
                 drawRoute();
-                
+
                 // Если данные уже загружены, автоматически анализируем маршрут
                 if (meteorologicalData.length > 0) {
                     analyzeRoute();
                 }
+            } else if (routePoints.length === 1) {
+                // Если выбрана 1 точка - анализируем область радиусом 30 км
+                analyzeAreaAroundPoint(routePoints[0], 30);
             }
+        }
+
+        function analyzeAreaAroundPoint(centerPoint, radiusKm) {
+            if (meteorologicalData.length === 0) {
+                showToast('Сначала получите данные о погоде', 'warning');
+                return;
+            }
+
+            showToast(`Анализ области радиусом ${radiusKm} км...`, 'info');
+
+            // Генерируем точки для анализа в радиусе 30 км
+            const analysisPoints = generateGridPoints(centerPoint, radiusKm);
+
+            // Анализируем каждую точку
+            const areaAnalysis = analysisPoints.map(point => {
+                const current = meteorologicalData[0];
+                const normalizedPos = Math.sqrt(Math.pow(point.lat - centerPoint.lat, 2) + Math.pow(point.lon - centerPoint.lon, 2)) / (radiusKm / 111);
+                const variation1 = Math.sin(normalizedPos * Math.PI * 3) * 1.5;
+                const variation2 = Math.cos(normalizedPos * Math.PI * 5) * 1.0;
+                const combinedVariation = variation1 + variation2;
+
+                const windVariation = combinedVariation * 1.2;
+                const precipVariation = Math.max(0, combinedVariation * 0.4);
+                const visibilityVariation = combinedVariation * 0.8;
+                const tempVariation = combinedVariation * 0.8;
+
+                const heightAnalysis = [];
+                const analysisHeights = [250, 350, 450, 550];
+                let maxRiskScore = 0;
+                let overallRisk = 'low';
+
+                analysisHeights.forEach(height => {
+                    const heightWind = Math.max(0, current.wind10m + (height / 100) * 0.5 + windVariation);
+                    const heightTemp = current.temp2m - (height / 100) * 0.65 + tempVariation;
+                    const heightPressure = Math.round(1013.25 * Math.pow(1 - 0.0065 * height / 288.15, 5.255) * 0.75006);
+                    const heightRh = Math.min(100, Math.max(0, current.rh - height / 50));
+                    const heightDewpoint = heightTemp - (100 - heightRh) / 5;
+                    const heightCloudCover = Math.min(100, Math.max(0, current.cloudCover + combinedVariation * 15));
+                    const turbulence = Math.min(10, Math.max(0, Math.abs(windVariation) + Math.abs(tempVariation) * 0.5));
+
+                    let heightRisk = 'low';
+                    let heightRiskScore = 0;
+
+                    if (heightWind > thresholds.windAlt) {
+                        heightRisk = 'high';
+                        heightRiskScore = 3;
+                    } else if (heightWind > thresholds.windAlt * 0.8) {
+                        heightRisk = 'medium';
+                        heightRiskScore = 2;
+                    }
+
+                    const icingRisk = (heightTemp <= 5 && heightTemp >= -10 && heightRh > 80);
+                    if (icingRisk) {
+                        if (heightTemp <= 0 && heightTemp >= -5) {
+                            heightRisk = 'high';
+                            heightRiskScore = Math.max(heightRiskScore, 3);
+                        } else {
+                            if (heightRisk === 'low') heightRisk = 'medium';
+                            heightRiskScore = Math.max(heightRiskScore, 2);
+                        }
+                    }
+
+                    if (turbulence > 6) {
+                        heightRisk = 'high';
+                        heightRiskScore = Math.max(heightRiskScore, 3);
+                    } else if (turbulence > 4) {
+                        if (heightRisk === 'low') heightRisk = 'medium';
+                        heightRiskScore = Math.max(heightRiskScore, 2);
+                    }
+
+                    const segmentVisibility = Math.max(1, current.visibility - visibilityVariation);
+                    if (segmentVisibility < thresholds.visibility) {
+                        heightRisk = 'high';
+                        heightRiskScore = Math.max(heightRiskScore, 3);
+                    }
+
+                    heightAnalysis.push({
+                        height,
+                        wind: heightWind.toFixed(1),
+                        temp: heightTemp.toFixed(1),
+                        pressure: heightPressure,
+                        rh: heightRh.toFixed(0),
+                        turbulence: turbulence.toFixed(1),
+                        risk: heightRisk,
+                        riskScore: heightRiskScore
+                    });
+
+                    if (heightRiskScore > maxRiskScore) {
+                        maxRiskScore = heightRiskScore;
+                        overallRisk = heightRisk;
+                    }
+                });
+
+                const segmentPrecip = Math.max(0, current.precip + precipVariation);
+                if (segmentPrecip > thresholds.precip) {
+                    overallRisk = 'high';
+                    maxRiskScore = Math.max(maxRiskScore, 3);
+                }
+
+                return {
+                    point,
+                    risk: overallRisk,
+                    riskScore: maxRiskScore,
+                    heightAnalysis,
+                    avgWind: (heightAnalysis.reduce((sum, h) => sum + parseFloat(h.wind), 0) / heightAnalysis.length).toFixed(1),
+                    avgTemp: (heightAnalysis.reduce((sum, h) => sum + parseFloat(h.temp), 0) / heightAnalysis.length).toFixed(1),
+                    precip: segmentPrecip.toFixed(1)
+                };
+            });
+
+            // Отображаем результаты анализа области
+            displayAreaAnalysis(areaAnalysis, centerPoint, radiusKm);
+        }
+
+        function generateGridPoints(center, radiusKm) {
+            const points = [];
+            const step = radiusKm / 3;
+            const steps = Math.ceil(radiusKm / step);
+
+            for (let i = -steps; i <= steps; i++) {
+                for (let j = -steps; j <= steps; j++) {
+                    const latOffset = (i * step) / 111;
+                    const lonOffset = (j * step) / (111 * Math.cos(center.lat * Math.PI / 180));
+                    const lat = center.lat + latOffset;
+                    const lon = center.lon + lonOffset;
+
+                    const distance = Math.sqrt(Math.pow(latOffset * 111, 2) + Math.pow(lonOffset * 111 * Math.cos(center.lat * Math.PI / 180), 2));
+                    if (distance <= radiusKm) {
+                        points.push({ lat, lon });
+                    }
+                }
+            }
+
+            return points;
+        }
+
+        function displayAreaAnalysis(areaAnalysis, centerPoint, radiusKm) {
+            const source = routeOverlay.getSource();
+            source.clear();
+
+            const centerCoords = ol.proj.fromLonLat([centerPoint.lon, centerPoint.lat]);
+            const radiusMeters = radiusKm * 1000;
+            const circleFeature = new ol.Feature({
+                geometry: new ol.geom.Circle(centerCoords, radiusMeters)
+            });
+            circleFeature.setStyle(new ol.style.Style({
+                stroke: new ol.style.Stroke({
+                    color: 'rgba(102, 126, 234, 0.8)',
+                    width: 2,
+                    lineDash: [10, 5]
+                }),
+                fill: new ol.style.Fill({
+                    color: 'rgba(102, 126, 234, 0.05)'
+                })
+            }));
+            source.addFeature(circleFeature);
+
+            areaAnalysis.forEach(point => {
+                const coords = ol.proj.fromLonLat([point.point.lon, point.point.lat]);
+                const markerFeature = new ol.Feature({ geometry: new ol.geom.Point(coords) });
+
+                let color;
+                if (point.risk === 'high') color = '#e53e3e';
+                else if (point.risk === 'medium') color = '#ed8936';
+                else color = '#38a169';
+
+                markerFeature.setStyle(new ol.style.Style({
+                    image: new ol.style.Circle({
+                        radius: 5,
+                        fill: new ol.style.Fill({ color }),
+                        stroke: new ol.style.Stroke({ color: '#fff', width: 1 })
+                    })
+                }));
+
+                source.addFeature(markerFeature);
+            });
+
+            map.getView().animate({
+                center: centerCoords,
+                zoom: 8,
+                duration: 500
+            });
+
+            document.getElementById('routePointB').textContent = `Область R=${radiusKm}км (${areaAnalysis.length} точек)`;
+
+            const highCount = areaAnalysis.filter(p => p.risk === 'high').length;
+            const medCount = areaAnalysis.filter(p => p.risk === 'medium').length;
+            const lowCount = areaAnalysis.filter(p => p.risk === 'low').length;
+            const totalPoints = areaAnalysis.length;
+
+            const highPercent = Math.round((highCount / totalPoints) * 100);
+            const medPercent = Math.round((medCount / totalPoints) * 100);
+            const lowPercent = Math.round((lowCount / totalPoints) * 100);
+
+            let overallRisk = 'low';
+            let riskText = 'БЛАГОПРИЯТНАЯ';
+            let riskColor = 'rgba(56, 161, 105, 0.2)';
+            let riskTextColor = '#276749';
+
+            if (highPercent > 20) {
+                overallRisk = 'high';
+                riskText = 'НЕБЛАГОПРИЯТНАЯ';
+                riskColor = 'rgba(229, 62, 62, 0.2)';
+                riskTextColor = '#c53030';
+            } else if (medPercent > 40) {
+                overallRisk = 'medium';
+                riskText = 'С ОГРАНИЧЕНИЯМИ';
+                riskColor = 'rgba(237, 137, 54, 0.2)';
+                riskTextColor = '#c05621';
+            }
+
+            const riskBadge = document.getElementById('routeRiskLevel');
+            riskBadge.style.background = riskColor;
+            riskBadge.style.color = riskTextColor;
+            riskBadge.textContent = `${riskText} (🔴${highPercent}% 🟠${medPercent}% 🟢${lowPercent}%)`;
+
+            showToast(`Анализ завершён: ${lowCount} благоприятных, ${medCount} с ограничениями, ${highCount} неблагоприятных`, 'success');
         }
 
         function drawRoute() {
