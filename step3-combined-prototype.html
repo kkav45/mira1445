@@ -1,0 +1,1293 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MIRA — Расширенный анализ: Комбинированный вариант</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+
+        h1 {
+            color: #2d3748;
+            font-size: 26px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .subtitle {
+            color: #718096;
+            font-size: 14px;
+            margin-bottom: 25px;
+        }
+
+        /* ========== КАРТОЧКИ ИСТОЧНИКОВ ========== */
+        .sources-section {
+            margin-bottom: 25px;
+        }
+
+        .section-label {
+            font-size: 13px;
+            font-weight: 700;
+            color: #4a5568;
+            text-transform: uppercase;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .sources-cards {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+        }
+
+        .source-card {
+            background: white;
+            border-radius: 12px;
+            padding: 18px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+            border-top: 4px solid;
+            transition: all 0.2s;
+            cursor: pointer;
+        }
+
+        .source-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.12);
+        }
+
+        .source-card.selected {
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+            border-color: #667eea;
+        }
+
+        .source-card.open-meteo { border-top-color: #3b82f6; }
+        .source-card.metno { border-top-color: #10b981; }
+        .source-card.pilot { border-top-color: #f59e0b; }
+        .source-card.corrected { border-top-color: #ef4444; }
+
+        .source-card-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .source-icon {
+            width: 42px;
+            height: 42px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            flex-shrink: 0;
+        }
+
+        .open-meteo .source-icon { background: rgba(59, 130, 246, 0.1); color: #3b82f6; }
+        .metno .source-icon { background: rgba(16, 185, 129, 0.1); color: #10b981; }
+        .pilot .source-icon { background: rgba(245, 158, 11, 0.1); color: #f59e0b; }
+        .corrected .source-icon { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+
+        .source-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .source-name {
+            font-size: 15px;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 3px;
+        }
+
+        .source-confidence {
+            font-size: 11px;
+            color: #718096;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .source-risk {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+
+        .risk-low { background: #c6f6d5; color: #22543d; }
+        .risk-medium { background: #feebc8; color: #744210; }
+        .risk-high { background: #fed7d7; color: #742a2a; }
+
+        .source-metrics {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            font-size: 12px;
+        }
+
+        .metric-row {
+            display: flex;
+            justify-content: space-between;
+            color: #4a5568;
+        }
+
+        .metric-label {
+            color: #718096;
+        }
+
+        .metric-value {
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        /* ========== ВКЛАДКИ ВИЗУАЛИЗАЦИИ ========== */
+        .visualization-section {
+            margin-bottom: 25px;
+        }
+
+        .viz-tabs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 0;
+        }
+
+        .viz-tab {
+            padding: 12px 24px;
+            border-radius: 10px 10px 0 0;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 14px;
+            font-weight: 600;
+            color: #718096;
+            border: 2px solid transparent;
+            border-bottom: none;
+        }
+
+        .viz-tab:hover {
+            background: #f7fafc;
+            color: #4a5568;
+        }
+
+        .viz-tab.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-color: #667eea;
+        }
+
+        .viz-content {
+            background: #f8fafc;
+            border-radius: 12px;
+            padding: 25px;
+            min-height: 450px;
+        }
+
+        /* ========== ТАБЛИЦА ========== */
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        }
+
+        .comparison-table th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            text-align: center;
+            font-weight: 600;
+            font-size: 13px;
+        }
+
+        .comparison-table th:first-child {
+            text-align: left;
+            width: 180px;
+        }
+
+        .comparison-table td {
+            padding: 14px;
+            text-align: center;
+            border-bottom: 1px solid #e2e8f0;
+            font-size: 14px;
+        }
+
+        .comparison-table tr:hover {
+            background: #f7fafc;
+        }
+
+        .comparison-table tr:last-child td {
+            border-bottom: none;
+            font-weight: 700;
+            background: #f0fff4;
+        }
+
+        .warning-icon {
+            color: #dd6b20;
+            margin-left: 5px;
+        }
+
+        /* ========== ГРАФИКИ ========== */
+        .charts-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+        }
+
+        .chart-container {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        }
+
+        .chart-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* ========== РЕКОМЕНДАЦИИ ========== */
+        .recommendations-block {
+            background: white;
+            border-radius: 12px;
+            padding: 20px;
+        }
+
+        .discrepancy-alert {
+            background: linear-gradient(135deg, rgba(237, 137, 54, 0.15) 0%, rgba(237, 137, 54, 0.08) 100%);
+            border: 2px solid #ed8936;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .discrepancy-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 15px;
+        }
+
+        .discrepancy-title {
+            font-size: 17px;
+            font-weight: 700;
+            color: #744210;
+        }
+
+        .discrepancy-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+        }
+
+        .discrepancy-item {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            text-align: center;
+        }
+
+        .discrepancy-label {
+            font-size: 12px;
+            color: #718096;
+            margin-bottom: 8px;
+        }
+
+        .discrepancy-value {
+            font-size: 22px;
+            font-weight: 700;
+            color: #2d3748;
+        }
+
+        .discrepancy-diff {
+            font-size: 11px;
+            color: #718096;
+            margin-top: 5px;
+        }
+
+        .recommendation-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+        }
+
+        .recommendation-item.critical {
+            background: rgba(239, 68, 68, 0.1);
+            border-left: 4px solid #ef4444;
+        }
+
+        .recommendation-item.warning {
+            background: rgba(237, 137, 54, 0.1);
+            border-left: 4px solid #ed8936;
+        }
+
+        .recommendation-item.success {
+            background: rgba(56, 161, 105, 0.1);
+            border-left: 4px solid #38a169;
+        }
+
+        .recommendation-item.info {
+            background: rgba(59, 130, 246, 0.1);
+            border-left: 4px solid #3b82f6;
+        }
+
+        .rec-icon {
+            font-size: 20px;
+            margin-top: 2px;
+            flex-shrink: 0;
+        }
+
+        .critical .rec-icon { color: #ef4444; }
+        .warning .rec-icon { color: #ed8936; }
+        .success .rec-icon { color: #38a169; }
+        .info .rec-icon { color: #3b82f6; }
+
+        .rec-text {
+            flex: 1;
+            color: #2d3748;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        /* ========== ДЕТАЛИ (АККОРДЕОН) ========== */
+        .details-accordion {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .accordion-item {
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        }
+
+        .accordion-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 18px 20px;
+            cursor: pointer;
+            transition: background 0.2s;
+            border-left: 4px solid;
+        }
+
+        .accordion-header:hover {
+            background: #f7fafc;
+        }
+
+        .accordion-item.open-meteo .accordion-header { border-left-color: #3b82f6; }
+        .accordion-item.metno .accordion-header { border-left-color: #10b981; }
+        .accordion-item.pilot .accordion-header { border-left-color: #f59e0b; }
+        .accordion-item.corrected .accordion-header { border-left-color: #ef4444; }
+
+        .accordion-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .accordion-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+        }
+
+        .open-meteo .accordion-icon { background: rgba(59, 130, 246, 0.1); color: #3b82f6; }
+        .metno .accordion-icon { background: rgba(16, 185, 129, 0.1); color: #10b981; }
+        .pilot .accordion-icon { background: rgba(245, 158, 11, 0.1); color: #f59e0b; }
+        .corrected .accordion-icon { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+
+        .accordion-name {
+            font-size: 16px;
+            font-weight: 700;
+            color: #2d3748;
+        }
+
+        .accordion-summary {
+            display: flex;
+            gap: 15px;
+            font-size: 13px;
+            color: #718096;
+        }
+
+        .accordion-toggle {
+            font-size: 18px;
+            color: #a0aec0;
+            transition: transform 0.3s;
+        }
+
+        .accordion-item.active .accordion-toggle {
+            transform: rotate(180deg);
+        }
+
+        .accordion-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+        }
+
+        .accordion-item.active .accordion-content {
+            max-height: 500px;
+        }
+
+        .accordion-body {
+            padding: 20px;
+            background: #f8fafc;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .data-table th {
+            background: #edf2f7;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 13px;
+            color: #4a5568;
+        }
+
+        .data-table td {
+            padding: 12px;
+            border-bottom: 1px solid #e2e8f0;
+            font-size: 14px;
+            color: #2d3748;
+        }
+
+        .data-table tr:hover {
+            background: #f7fafc;
+        }
+
+        /* ========== АДАПТИВНОСТЬ ========== */
+        @media (max-width: 1200px) {
+            .sources-cards {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                padding: 15px;
+            }
+
+            .sources-cards {
+                grid-template-columns: 1fr;
+            }
+
+            .charts-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .discrepancy-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .viz-tabs {
+                overflow-x: auto;
+                white-space: nowrap;
+            }
+
+            .comparison-table {
+                font-size: 12px;
+            }
+
+            .comparison-table th {
+                padding: 10px 5px;
+                font-size: 11px;
+            }
+
+            .comparison-table td {
+                padding: 10px 5px;
+            }
+        }
+
+        /* ========== СКРОЛЛБАР ========== */
+        .viz-tabs::-webkit-scrollbar {
+            height: 6px;
+        }
+
+        .viz-tabs::-webkit-scrollbar-track {
+            background: #e2e8f0;
+            border-radius: 3px;
+        }
+
+        .viz-tabs::-webkit-scrollbar-thumb {
+            background: #cbd5e0;
+            border-radius: 3px;
+        }
+
+        .viz-tabs::-webkit-scrollbar-thumb:hover {
+            background: #a0aec0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>
+            <i class="fas fa-microscope"></i>
+            Расширенный анализ
+        </h1>
+        <p class="subtitle">Сравнение 4 источников: Open-Meteo, MET Norway, фактические данные пилота, скорректированный прогноз</p>
+
+        <!-- ========== КАРТОЧКИ ИСТОЧНИКОВ ========== -->
+        <div class="sources-section">
+            <div class="section-label">
+                <i class="fas fa-database"></i>
+                Источники данных
+            </div>
+            <div class="sources-cards">
+                <!-- Open-Meteo -->
+                <div class="source-card open-meteo selected" onclick="selectSource('openMeteo')">
+                    <div class="source-card-header">
+                        <div class="source-icon">
+                            <i class="fas fa-cloud-sun"></i>
+                        </div>
+                        <div class="source-info">
+                            <div class="source-name">Open-Meteo</div>
+                            <div class="source-confidence">Доверие: 63% (прогноз 24ч)</div>
+                        </div>
+                    </div>
+                    <div class="source-risk risk-low">🟢 2.1</div>
+                    <div class="source-metrics">
+                        <div class="metric-row">
+                            <span class="metric-label"><i class="fas fa-wind"></i> Ветер</span>
+                            <span class="metric-value">8.2 м/с</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label"><i class="fas fa-thermometer-half"></i> Темп.</span>
+                            <span class="metric-value">+5.0°C</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label"><i class="fas fa-tint"></i> Влажн.</span>
+                            <span class="metric-value">65%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- MET No -->
+                <div class="source-card metno" onclick="selectSource('metNo')">
+                    <div class="source-card-header">
+                        <div class="source-icon">
+                            <i class="fas fa-globe-europe"></i>
+                        </div>
+                        <div class="source-info">
+                            <div class="source-name">MET Norway</div>
+                            <div class="source-confidence">Доверие: 58% (прогноз 24ч)</div>
+                        </div>
+                    </div>
+                    <div class="source-risk risk-low">🟢 1.8</div>
+                    <div class="source-metrics">
+                        <div class="metric-row">
+                            <span class="metric-label"><i class="fas fa-wind"></i> Ветер</span>
+                            <span class="metric-value">6.5 м/с</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label"><i class="fas fa-thermometer-half"></i> Темп.</span>
+                            <span class="metric-value">+4.2°C</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label"><i class="fas fa-tint"></i> Влажн.</span>
+                            <span class="metric-value">70%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Пилот -->
+                <div class="source-card pilot" onclick="selectSource('pilot')">
+                    <div class="source-card-header">
+                        <div class="source-icon">
+                            <i class="fas fa-flag"></i>
+                        </div>
+                        <div class="source-info">
+                            <div class="source-name">Пилот (факт)</div>
+                            <div class="source-confidence">Доверие: 100% (фактические данные)</div>
+                        </div>
+                    </div>
+                    <div class="source-risk risk-medium">🟡 3.5</div>
+                    <div class="source-metrics">
+                        <div class="metric-row">
+                            <span class="metric-label"><i class="fas fa-wind"></i> Ветер</span>
+                            <span class="metric-value">10.5 м/с ⚠️</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label"><i class="fas fa-thermometer-half"></i> Темп.</span>
+                            <span class="metric-value">+3.0°C</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label"><i class="fas fa-tint"></i> Влажн.</span>
+                            <span class="metric-value">75%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Скоррект. -->
+                <div class="source-card corrected" onclick="selectSource('corrected')">
+                    <div class="source-card-header">
+                        <div class="source-icon">
+                            <i class="fas fa-cog"></i>
+                        </div>
+                        <div class="source-info">
+                            <div class="source-name">Скорректированный</div>
+                            <div class="source-confidence">Доверие: 100% (факт + коррекция)</div>
+                        </div>
+                    </div>
+                    <div class="source-risk risk-medium">🟡 3.5</div>
+                    <div class="source-metrics">
+                        <div class="metric-row">
+                            <span class="metric-label"><i class="fas fa-wind"></i> Ветер</span>
+                            <span class="metric-value">11.0 м/с ⚠️</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label"><i class="fas fa-thermometer-half"></i> Темп.</span>
+                            <span class="metric-value">+3.0°C</span>
+                        </div>
+                        <div class="metric-row">
+                            <span class="metric-label"><i class="fas fa-tint"></i> Влажн.</span>
+                            <span class="metric-value">75%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ========== ВКЛАДКИ ВИЗУАЛИЗАЦИИ ========== -->
+        <div class="visualization-section">
+            <div class="section-label">
+                <i class="fas fa-chart-bar"></i>
+                Визуализация
+            </div>
+            <div class="viz-tabs">
+                <div class="viz-tab active" onclick="switchViz('table')">
+                    <i class="fas fa-table"></i> Таблица
+                </div>
+                <div class="viz-tab" onclick="switchViz('charts')">
+                    <i class="fas fa-chart-area"></i> Графики
+                </div>
+                <div class="viz-tab" onclick="switchViz('recommendations')">
+                    <i class="fas fa-lightbulb"></i> Рекомендации
+                </div>
+                <div class="viz-tab" onclick="switchViz('details')">
+                    <i class="fas fa-list"></i> Детали
+                </div>
+            </div>
+
+            <div class="viz-content" id="vizContent">
+                <!-- Контент загружается динамически -->
+            </div>
+        </div>
+
+        <!-- ========== АТРИБУЦИЯ ========== -->
+        <div style="text-align: center; font-size: 11px; color: rgba(0,0,0,0.4); padding-top: 20px; border-top: 1px solid #e2e8f0;">
+            <i class="fas fa-info-circle"></i> 
+            Данные: Open-Meteo API (https://open-meteo.com/), MET Norway API (https://api.met.no/), Наблюдения пилота
+        </div>
+    </div>
+
+    <!-- ========== СКРИПТЫ ========== -->
+    <script>
+        let currentViz = 'table';
+        let selectedSource = 'openMeteo';
+
+        // Данные для графиков
+        const hours = Array.from({length: 24}, (_, i) => {
+            const date = new Date();
+            date.setHours(date.getHours() + i);
+            return date.toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit'});
+        });
+
+        // Инициализация
+        document.addEventListener('DOMContentLoaded', () => {
+            renderVizContent();
+        });
+
+        // Переключение визуализации
+        function switchViz(vizType) {
+            currentViz = vizType;
+            
+            // Обновляем активную вкладку
+            document.querySelectorAll('.viz-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            event.target.closest('.viz-tab').classList.add('active');
+            
+            renderVizContent();
+        }
+
+        // Выбор источника
+        function selectSource(source) {
+            selectedSource = source;
+            
+            document.querySelectorAll('.source-card').forEach(card => {
+                card.classList.remove('selected');
+            });
+            event.target.closest('.source-card').classList.add('selected');
+            
+            showToast(`Выбран источник: ${source}`);
+        }
+
+        // Рендер контента
+        function renderVizContent() {
+            const container = document.getElementById('vizContent');
+            
+            switch (currentViz) {
+                case 'table':
+                    container.innerHTML = renderTable();
+                    break;
+                case 'charts':
+                    container.innerHTML = renderCharts();
+                    setTimeout(initCharts, 100);
+                    break;
+                case 'recommendations':
+                    container.innerHTML = renderRecommendations();
+                    break;
+                case 'details':
+                    container.innerHTML = renderDetails();
+                    break;
+            }
+        }
+
+        // Рендер таблицы
+        function renderTable() {
+            return `
+                <table class="comparison-table">
+                    <thead>
+                        <tr>
+                            <th>Параметр</th>
+                            <th style="border-left: 4px solid #3b82f6;">
+                                <i class="fas fa-cloud-sun"></i> Open-Meteo
+                            </th>
+                            <th style="border-left: 4px solid #10b981;">
+                                <i class="fas fa-globe-europe"></i> MET No
+                            </th>
+                            <th style="border-left: 4px solid #f59e0b;">
+                                <i class="fas fa-flag"></i> Пилот (факт)
+                            </th>
+                            <th style="border-left: 4px solid #ef4444;">
+                                <i class="fas fa-cog"></i> Скоррект.
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td style="text-align: left; font-weight: 600;">Ветер 10м (м/с)</td>
+                            <td style="border-left: 4px solid #3b82f6;">8.2</td>
+                            <td style="border-left: 4px solid #10b981;">6.5</td>
+                            <td style="border-left: 4px solid #f59e0b;"><strong>10.5</strong> <span class="warning-icon">⚠️</span></td>
+                            <td style="border-left: 4px solid #ef4444;"><strong>11.0</strong> <span class="warning-icon">⚠️</span></td>
+                        </tr>
+                        <tr>
+                            <td style="text-align: left; font-weight: 600;">Температура (°C)</td>
+                            <td style="border-left: 4px solid #3b82f6;">+5.0</td>
+                            <td style="border-left: 4px solid #10b981;">+4.2</td>
+                            <td style="border-left: 4px solid #f59e0b;"><strong>+3.0</strong></td>
+                            <td style="border-left: 4px solid #ef4444;"><strong>+3.0</strong></td>
+                        </tr>
+                        <tr>
+                            <td style="text-align: left; font-weight: 600;">Влажность (%)</td>
+                            <td style="border-left: 4px solid #3b82f6;">65</td>
+                            <td style="border-left: 4px solid #10b981;">70</td>
+                            <td style="border-left: 4px solid #f59e0b;"><strong>75</strong></td>
+                            <td style="border-left: 4px solid #ef4444;"><strong>75</strong></td>
+                        </tr>
+                        <tr>
+                            <td style="text-align: left; font-weight: 600;">Видимость (км)</td>
+                            <td style="border-left: 4px solid #3b82f6;">10</td>
+                            <td style="border-left: 4px solid #10b981;">8</td>
+                            <td style="border-left: 4px solid #f59e0b;"><strong>8</strong></td>
+                            <td style="border-left: 4px solid #ef4444;"><strong>8</strong></td>
+                        </tr>
+                        <tr>
+                            <td style="text-align: left; font-weight: 600;">Давление (гПа)</td>
+                            <td style="border-left: 4px solid #3b82f6;">1013</td>
+                            <td style="border-left: 4px solid #10b981;">1015</td>
+                            <td style="border-left: 4px solid #f59e0b;">—</td>
+                            <td style="border-left: 4px solid #ef4444;">1013</td>
+                        </tr>
+                        <tr>
+                            <td style="text-align: left; font-weight: 600;">Осадки (мм/ч)</td>
+                            <td style="border-left: 4px solid #3b82f6;">0.0</td>
+                            <td style="border-left: 4px solid #10b981;">0.2</td>
+                            <td style="border-left: 4px solid #f59e0b;"><strong>0.0</strong></td>
+                            <td style="border-left: 4px solid #ef4444;"><strong>0.0</strong></td>
+                        </tr>
+                        <tr>
+                            <td style="text-align: left; font-weight: 600;">Облачность (%)</td>
+                            <td style="border-left: 4px solid #3b82f6;">40</td>
+                            <td style="border-left: 4px solid #10b981;">55</td>
+                            <td style="border-left: 4px solid #f59e0b;">—</td>
+                            <td style="border-left: 4px solid #ef4444;">40</td>
+                        </tr>
+                        <tr>
+                            <td style="text-align: left;">
+                                <i class="fas fa-chart-line"></i> ОБЩИЙ РИСК
+                            </td>
+                            <td style="border-left: 4px solid #3b82f6;">
+                                <span class="source-risk risk-low">🟢 2.1</span>
+                            </td>
+                            <td style="border-left: 4px solid #10b981;">
+                                <span class="source-risk risk-low">🟢 1.8</span>
+                            </td>
+                            <td style="border-left: 4px solid #f59e0b;">
+                                <span class="source-risk risk-medium">🟡 3.5</span>
+                                <span class="warning-icon">⚠️</span>
+                            </td>
+                            <td style="border-left: 4px solid #ef4444;">
+                                <span class="source-risk risk-medium">🟡 3.5</span>
+                                <span class="warning-icon">⚠️</span>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            `;
+        }
+
+        // Ренер графиков
+        function renderCharts() {
+            return `
+                <div class="charts-grid">
+                    <div class="chart-container">
+                        <div class="chart-title">
+                            <i class="fas fa-wind"></i> Сравнение ветрового профиля
+                        </div>
+                        <div id="windChart" style="width: 100%; height: 350px;"></div>
+                    </div>
+                    <div class="chart-container">
+                        <div class="chart-title">
+                            <i class="fas fa-thermometer-half"></i> Сравнение температуры
+                        </div>
+                        <div id="tempChart" style="width: 100%; height: 350px;"></div>
+                    </div>
+                    <div class="chart-container" style="grid-column: 1 / -1;">
+                        <div class="chart-title">
+                            <i class="fas fa-chart-line"></i> Тепловая карта рисков
+                        </div>
+                        <div id="riskChart" style="width: 100%; height: 300px;"></div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Инициализация графиков
+        function initCharts() {
+            // Ветер
+            Plotly.newPlot('windChart', [
+                {
+                    x: hours,
+                    y: hours.map((_, i) => 8.2 + Math.sin(i / 4) * 1.5),
+                    name: 'Open-Meteo',
+                    line: {color: '#3b82f6', width: 2}
+                },
+                {
+                    x: hours,
+                    y: hours.map((_, i) => 6.5 + Math.sin(i / 4) * 1.2),
+                    name: 'MET No',
+                    line: {color: '#10b981', width: 2, dash: 'dash'}
+                },
+                {
+                    x: [hours[0]],
+                    y: [10.5],
+                    name: 'Пилот (факт)',
+                    mode: 'markers',
+                    marker: {color: '#f59e0b', size: 12, symbol: 'star'}
+                },
+                {
+                    x: hours,
+                    y: hours.map((_, i) => 11.0 + Math.sin(i / 4) * 1.6),
+                    name: 'Скоррект.',
+                    line: {color: '#ef4444', width: 3}
+                }
+            ], {
+                margin: {t: 20, b: 50, l: 50, r: 20},
+                xaxis: {title: 'Время', tickangle: -45},
+                yaxis: {title: 'Ветер (м/с)'},
+                showlegend: true,
+                legend: {x: 0, y: 1}
+            });
+
+            // Температура
+            Plotly.newPlot('tempChart', [
+                {
+                    x: hours,
+                    y: hours.map((_, i) => 5 + Math.sin(i / 6) * 3),
+                    name: 'Open-Meteo',
+                    line: {color: '#3b82f6', width: 2}
+                },
+                {
+                    x: hours,
+                    y: hours.map((_, i) => 4.2 + Math.sin(i / 6) * 2.5),
+                    name: 'MET No',
+                    line: {color: '#10b981', width: 2, dash: 'dash'}
+                },
+                {
+                    x: [hours[0]],
+                    y: [3],
+                    name: 'Пилот (факт)',
+                    mode: 'markers',
+                    marker: {color: '#f59e0b', size: 12, symbol: 'star'}
+                },
+                {
+                    x: hours,
+                    y: hours.map((_, i) => 3 + Math.sin(i / 6) * 2.8),
+                    name: 'Скоррект.',
+                    line: {color: '#ef4444', width: 3}
+                }
+            ], {
+                margin: {t: 20, b: 50, l: 50, r: 20},
+                xaxis: {title: 'Время', tickangle: -45},
+                yaxis: {title: 'Температура (°C)'},
+                showlegend: true,
+                legend: {x: 0, y: 1}
+            });
+
+            // Риски
+            Plotly.newPlot('riskChart', [
+                {
+                    x: hours,
+                    y: ['Open-Meteo'],
+                    z: [hours.map((_, i) => 2 + Math.random() * 1.5)],
+                    type: 'heatmap',
+                    colorscale: [[0, '#c6f6d5'], [0.5, '#feebc8'], [1, '#fed7d7']],
+                    showscale: false
+                },
+                {
+                    x: hours,
+                    y: ['MET No'],
+                    z: [hours.map((_, i) => 1.8 + Math.random() * 1.2)],
+                    type: 'heatmap',
+                    showscale: false
+                },
+                {
+                    x: hours,
+                    y: ['Скоррект.'],
+                    z: [hours.map((_, i) => 3.5 + Math.sin(i / 8) * 0.8)],
+                    type: 'heatmap',
+                    colorscale: [[0, '#c6f6d5'], [0.5, '#feebc8'], [1, '#fed7d7']],
+                    showscale: false
+                }
+            ], {
+                margin: {t: 20, b: 50, l: 80, r: 20},
+                xaxis: {title: 'Время', tickangle: -45},
+                showlegend: false
+            });
+        }
+
+        // Рендер рекомендаций
+        function renderRecommendations() {
+            return `
+                <div class="recommendations-block">
+                    <div class="discrepancy-alert">
+                        <div class="discrepancy-header">
+                            <i class="fas fa-exclamation-triangle" style="font-size: 24px; color: #ed8936;"></i>
+                            <div class="discrepancy-title">Среднее расхождение прогнозов</div>
+                        </div>
+                        <div class="discrepancy-grid">
+                            <div class="discrepancy-item">
+                                <div class="discrepancy-label">Ветер</div>
+                                <div class="discrepancy-value">1.7 м/с</div>
+                                <div class="discrepancy-diff">Open-Meteo: 8.2 | MET No: 6.5</div>
+                            </div>
+                            <div class="discrepancy-item">
+                                <div class="discrepancy-label">Температура</div>
+                                <div class="discrepancy-value">0.8°C</div>
+                                <div class="discrepancy-diff">Open-Meteo: +5.0 | MET No: +4.2</div>
+                            </div>
+                            <div class="discrepancy-item">
+                                <div class="discrepancy-label">Влажность</div>
+                                <div class="discrepancy-value">5%</div>
+                                <div class="discrepancy-diff">Open-Meteo: 65% | MET No: 70%</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="recommendation-item warning">
+                        <i class="fas fa-exclamation-triangle rec-icon"></i>
+                        <div class="rec-text">
+                            <strong>Расхождение прогнозов:</strong> Open-Meteo показывает ветер на 1.7 м/с слабее, чем MET No. 
+                            Фактические данные пилота (10.5 м/с) ближе к MET No. <strong>Рекомендуется использовать MET No для планирования.</strong>
+                        </div>
+                    </div>
+
+                    <div class="recommendation-item critical">
+                        <i class="fas fa-ban rec-icon"></i>
+                        <div class="rec-text">
+                            <strong>ВЫСОКИЙ РИСК по скорректированным данным:</strong> Ветер 11.0 м/с превышает порог 10 м/с. 
+                            Рекомендуется отложить полёт или ограничить высоту 350м.
+                        </div>
+                    </div>
+
+                    <div class="recommendation-item info">
+                        <i class="fas fa-info-circle rec-icon"></i>
+                        <div class="rec-text">
+                            <strong>Доверие к источникам:</strong> Пилот (100%) > Скорректированный (100%) > Open-Meteo (63%) > MET No (58%). 
+                            Используйте фактические данные для коррекции прогноза.
+                        </div>
+                    </div>
+
+                    <div class="recommendation-item success">
+                        <i class="fas fa-check-circle rec-icon"></i>
+                        <div class="rec-text">
+                            <strong>Благоприятное окно:</strong> По скорректированным данным, лучшее время для полёта: 
+                            <strong>14:00–16:00</strong> (ветер 8.5 м/с, риск 🟢 2.3).
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Рендер деталей
+        function renderDetails() {
+            return `
+                <div class="details-accordion">
+                    <div class="accordion-item open-meteo">
+                        <div class="accordion-header" onclick="toggleAccordion(this)">
+                            <div class="accordion-title">
+                                <div class="accordion-icon">
+                                    <i class="fas fa-cloud-sun"></i>
+                                </div>
+                                <div>
+                                    <div class="accordion-name">Open-Meteo</div>
+                                    <div class="accordion-summary">
+                                        <span>Ветер: 8.2 м/с</span>
+                                        <span>•</span>
+                                        <span>Темп: +5.0°C</span>
+                                        <span>•</span>
+                                        <span>Риск: 🟢 2.1</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <i class="fas fa-chevron-down accordion-toggle"></i>
+                        </div>
+                        <div class="accordion-content">
+                            <div class="accordion-body">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Время</th>
+                                            <th>Ветер (м/с)</th>
+                                            <th>Темп (°C)</th>
+                                            <th>Влажность (%)</th>
+                                            <th>Давление (гПа)</th>
+                                            <th>Риск</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr><td>10:00</td><td>8.2</td><td>+5.0</td><td>65</td><td>1013</td><td>🟢 2.1</td></tr>
+                                        <tr><td>11:00</td><td>8.5</td><td>+5.2</td><td>64</td><td>1013</td><td>🟢 2.3</td></tr>
+                                        <tr><td>12:00</td><td>9.0</td><td>+5.5</td><td>62</td><td>1012</td><td>🟡 3.0</td></tr>
+                                        <tr><td>13:00</td><td>9.5</td><td>+5.8</td><td>60</td><td>1012</td><td>🟡 3.2</td></tr>
+                                        <tr><td>14:00</td><td>9.2</td><td>+6.0</td><td>58</td><td>1011</td><td>🟡 3.0</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="accordion-item metno">
+                        <div class="accordion-header" onclick="toggleAccordion(this)">
+                            <div class="accordion-title">
+                                <div class="accordion-icon">
+                                    <i class="fas fa-globe-europe"></i>
+                                </div>
+                                <div>
+                                    <div class="accordion-name">MET Norway</div>
+                                    <div class="accordion-summary">
+                                        <span>Ветер: 6.5 м/с</span>
+                                        <span>•</span>
+                                        <span>Темп: +4.2°C</span>
+                                        <span>•</span>
+                                        <span>Риск: 🟢 1.8</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <i class="fas fa-chevron-down accordion-toggle"></i>
+                        </div>
+                        <div class="accordion-content">
+                            <div class="accordion-body">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Время</th>
+                                            <th>Ветер (м/с)</th>
+                                            <th>Темп (°C)</th>
+                                            <th>Влажность (%)</th>
+                                            <th>Давление (гПа)</th>
+                                            <th>Риск</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr><td>10:00</td><td>6.5</td><td>+4.2</td><td>70</td><td>1015</td><td>🟢 1.8</td></tr>
+                                        <tr><td>11:00</td><td>6.8</td><td>+4.5</td><td>68</td><td>1015</td><td>🟢 2.0</td></tr>
+                                        <tr><td>12:00</td><td>7.2</td><td>+4.8</td><td>66</td><td>1014</td><td>🟢 2.2</td></tr>
+                                        <tr><td>13:00</td><td>7.5</td><td>+5.0</td><td>64</td><td>1014</td><td>🟢 2.5</td></tr>
+                                        <tr><td>14:00</td><td>7.2</td><td>+5.2</td><td>62</td><td>1013</td><td>🟢 2.2</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="accordion-item pilot">
+                        <div class="accordion-header" onclick="toggleAccordion(this)">
+                            <div class="accordion-title">
+                                <div class="accordion-icon">
+                                    <i class="fas fa-flag"></i>
+                                </div>
+                                <div>
+                                    <div class="accordion-name">Пилот (фактические данные)</div>
+                                    <div class="accordion-summary">
+                                        <span>Ветер: 10.5 м/с ⚠️</span>
+                                        <span>•</span>
+                                        <span>Темп: +3.0°C</span>
+                                        <span>•</span>
+                                        <span>Риск: 🟡 3.5</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <i class="fas fa-chevron-down accordion-toggle"></i>
+                        </div>
+                        <div class="accordion-content">
+                            <div class="accordion-body">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Параметр</th>
+                                            <th>Значение</th>
+                                            <th>Статус</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr><td>Ветер (м/с)</td><td><strong>10.5</strong></td><td><span style="color: #ed8936;">⚠️ Выше порога</span></td></tr>
+                                        <tr><td>Температура (°C)</td><td><strong>+3.0</strong></td><td><span style="color: #38a169;">✅ В норме</span></td></tr>
+                                        <tr><td>Влажность (%)</td><td><strong>75</strong></td><td><span style="color: #ed8936;">⚠️ Повышенная</span></td></tr>
+                                        <tr><td>Видимость (км)</td><td><strong>8</strong></td><td><span style="color: #38a169;">✅ В норме</span></td></tr>
+                                        <tr><td>Давление (гПа)</td><td><strong>—</strong></td><td><span style="color: #a0aec0;">Не измерялось</span></td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="accordion-item corrected">
+                        <div class="accordion-header" onclick="toggleAccordion(this)">
+                            <div class="accordion-title">
+                                <div class="accordion-icon">
+                                    <i class="fas fa-cog"></i>
+                                </div>
+                                <div>
+                                    <div class="accordion-name">Скорректированный прогноз (Open-Meteo + Пилот)</div>
+                                    <div class="accordion-summary">
+                                        <span>Ветер: 11.0 м/с ⚠️</span>
+                                        <span>•</span>
+                                        <span>Темп: +3.0°C</span>
+                                        <span>•</span>
+                                        <span>Риск: 🟡 3.5</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <i class="fas fa-chevron-down accordion-toggle"></i>
+                        </div>
+                        <div class="accordion-content">
+                            <div class="accordion-body">
+                                <table class="data-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Время</th>
+                                            <th>Ветер (м/с)</th>
+                                            <th>Темп (°C)</th>
+                                            <th>Влажность (%)</th>
+                                            <th>Давление (гПа)</th>
+                                            <th>Риск</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr><td>10:00</td><td><strong>11.0</strong></td><td><strong>+3.0</strong></td><td><strong>75</strong></td><td>1013</td><td>🟡 3.5</td></tr>
+                                        <tr><td>11:00</td><td><strong>11.2</strong></td><td><strong>+3.2</strong></td><td><strong>73</strong></td><td>1013</td><td>🟡 3.3</td></tr>
+                                        <tr><td>12:00</td><td><strong>11.5</strong></td><td><strong>+3.5</strong></td><td><strong>70</strong></td><td>1012</td><td>🟡 3.5</td></tr>
+                                        <tr><td>13:00</td><td><strong>11.8</strong></td><td><strong>+3.8</strong></td><td><strong>68</strong></td><td>1012</td><td>🟡 3.8</td></tr>
+                                        <tr><td>14:00</td><td><strong>11.2</strong></td><td><strong>+4.0</strong></td><td><strong>65</strong></td><td>1011</td><td>🟡 3.2</td></tr>
+                                    </tbody>
+                                </table>
+                                <div style="margin-top: 15px; padding: 12px; background: rgba(59, 130, 246, 0.1); border-left: 4px solid #3b82f6; border-radius: 8px; font-size: 13px;">
+                                    <i class="fas fa-info-circle" style="color: #3b82f6;"></i>
+                                    <strong>Применена коррекция:</strong> Ветер ×1.375 (факт/прогноз), Температура -2.0°C (смещение)
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Переключение аккордеона
+        function toggleAccordion(header) {
+            const item = header.closest('.accordion-item');
+            const wasActive = item.classList.contains('active');
+            
+            // Закрываем все
+            document.querySelectorAll('.accordion-item').forEach(i => {
+                i.classList.remove('active');
+            });
+            
+            // Если не был активным, открываем
+            if (!wasActive) {
+                item.classList.add('active');
+            }
+        }
+
+        // Уведомления
+        function showToast(message) {
+            console.log('📢', message);
+        }
+    </script>
+</body>
+</html>

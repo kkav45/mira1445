@@ -31,8 +31,8 @@ echo.
 
 echo [3/4] Настройка удалённого репозитория...
 git remote remove origin 2>nul
-git remote add origin https://github.com/kkav45/mira0141.git
-echo Репозиторий: https://github.com/kkav45/mira0141
+git remote add origin https://github.com/kkav45/mira0143.git
+echo Репозиторий: https://github.com/kkav45/mira0143
 echo.
 
 echo [4/4] Сохранение учётных данных...
@@ -55,7 +55,7 @@ echo [INFO] Первая загрузка для настройки...
 echo.
 
 git add .
-git commit -m "Initial commit: MIRA v0.1.4.1"
+git commit -m "Initial commit: MIRA v0.1.4.3"
 git push -u origin main
 
 if %errorlevel% equ 0 (

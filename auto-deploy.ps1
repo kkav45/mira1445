@@ -1,9 +1,9 @@
 # MIRA - Автоматическая загрузка при изменении файлов
 # Запускается в фоновом режиме и отслеживает изменения
 
-$watchPath = "d:\! Погода\MIRA 0.1.4.1"
-$filter = "*.html"
-$gitRepo = "https://github.com/kkav45/mira0141.git"
+$watchPath = "d:\! Погода\MIRA 0.1.4.3"
+$filter = "*.*"
+$gitRepo = "https://github.com/kkav45/mira0143.git"
 $branch = "main"
 
 Write-Host "========================================" -ForegroundColor Cyan
@@ -96,8 +96,8 @@ $action = {
     $path = $Event.SourceEventArgs.FullPath
     $changeType = $Event.SourceEventArgs.ChangeType
     
-    # Игнорируем временные файлы
-    if ($path -match "~\$" -or $path -match "\.tmp") {
+    # Игнорируем временные файлы и служебные
+    if ($path -match "~\$" -or $path -match "\.tmp" -or $path -match "\.git" -or $path -match "node_modules") {
         return
     }
     

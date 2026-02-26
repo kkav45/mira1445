@@ -30,7 +30,7 @@ start-auto-deploy.bat
 ```
 
 **Что делает:**
-- 🟢 Мониторит изменения файлов `.html`
+- 🟢 Мониторит изменения файлов (HTML, CSS, JS, и другие)
 - 🟢 Автоматически создаёт коммит
 - 🟢 Загружает на GitHub
 - 🟢 Работает в фоновом режиме
@@ -70,7 +70,7 @@ start-auto-deploy.bat
 ┌─────────────────────────────────────────────────┐
 │  start-auto-deploy.bat запущен                  │
 │                                                 │
-│  1. Вы редактируете index.html                  │
+│  1. Вы редактируете файл (html/css/js)          │
 │  2. Скрипт обнаруживает изменение               │
 │  3. Ждёт 1 секунду (завершение записи)          │
 │  4. git add .                                   │
@@ -88,7 +88,7 @@ start-auto-deploy.bat
 
 Откройте `auto-deploy.ps1`, измените строку:
 ```powershell
-$filter = "*.html"  # Например: "*.html,*.css,*.js"
+$filter = "*.*"  # Все файлы (кроме .git и tmp)
 ```
 
 ### Изменить частоту проверки
@@ -118,8 +118,8 @@ Start-Sleep -Seconds 1  # Задержка перед загрузкой
 
 ## 🔗 Ссылки
 
-- Репозиторий: https://github.com/kkav45/mira0141
-- GitHub Pages: https://kkav45.github.io/mira0141/
+- Репозиторий: https://github.com/kkav45/mira0143
+- GitHub Pages: https://kkav45.github.io/mira0143/
 - Git для Windows: https://git-scm.com/download/win
 
 ---

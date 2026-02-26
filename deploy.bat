@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 >nul
 echo ========================================
-echo   MIRA - Автоматическая загрузка на GitHub
+echo   MIRA - Ручная загрузка на GitHub
 echo ========================================
 echo.
 
@@ -9,7 +9,7 @@ REM Проверка наличия изменений
 git status >nul 2>&1
 if %errorlevel% neq 0 (
     echo [ОШИБКА] Это не Git репозиторий!
-    echo Выполните: git init
+    echo Выполните: init-auto-upload.bat
     pause
     exit /b 1
 )
@@ -20,7 +20,7 @@ git add .
 
 REM Коммит
 echo [2/4] Создание коммита...
-git commit -m "Auto-update: %date% %time%"
+git commit -m "Update: %date% %time%"
 
 REM Пуш на GitHub
 echo [3/4] Загрузка на GitHub...
@@ -32,7 +32,8 @@ if %errorlevel% equ 0 (
     echo   [УСПЕХ] Загрузка завершена!
     echo ========================================
     echo.
-    echo Репозиторий: https://github.com/kkav45/mira0141
+    echo Репозиторий: https://github.com/kkav45/mira0143
+    echo GitHub Pages: https://kkav45.github.io/mira0143/
 ) else (
     echo.
     echo ========================================

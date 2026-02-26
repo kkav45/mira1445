@@ -1,0 +1,2576 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MIRA - Тест OpenLayers Features</title>
+
+    <!-- OpenLayers -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v9.2.4/ol.css">
+    <script src="https://cdn.jsdelivr.net/npm/ol@v9.2.4/dist/ol.js"></script>
+
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+    <style>
+        /* Стили для Graticule */
+        .ol-graticule {
+            stroke: rgba(255, 120, 0, 0.9);
+            stroke-width: 1;
+            stroke-dasharray: 0.5, 4;
+        }
+        
+        /* Стили для частиц ветра */
+        .wind-particle {
+            stroke: rgba(255, 255, 255, 0.5);
+            stroke-width: 1.5;
+        }
+        
+        /* Стили для капель дождя */
+        .rain-drop {
+            fill: rgba(102, 126, 234, 0.7);
+        }
+    </style>
+
+    <!-- Plotly.js для графиков -->
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+
+    <!-- pdfmake для экспорта PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
+
+    <!-- html2canvas для скриншотов -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+
+        /* Карта */
+        #map {
+            flex: 1;
+            height: 100%;
+            position: relative;
+        }
+
+        /* Панель управления */
+        .control-panel {
+            width: 320px;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #fff;
+            padding: 20px;
+            overflow-y: auto;
+            box-shadow: -4px 0 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .panel-title {
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .panel-title i {
+            color: #667eea;
+        }
+
+        .section {
+            margin-bottom: 24px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 10px;
+            padding: 14px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .section-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #667eea;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .btn {
+            padding: 8px 14px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s;
+            background: rgba(102, 126, 234, 0.2);
+            color: #fff;
+            border: 1px solid rgba(102, 126, 234, 0.3);
+        }
+
+        .btn:hover {
+            background: rgba(102, 126, 234, 0.4);
+            transform: translateY(-1px);
+        }
+
+        .btn.active {
+            background: #667eea;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-success {
+            background: rgba(56, 161, 105, 0.2);
+            border-color: rgba(56, 161, 105, 0.3);
+        }
+
+        .btn-success:hover {
+            background: rgba(56, 161, 105, 0.4);
+        }
+
+        .btn-danger {
+            background: rgba(229, 62, 62, 0.2);
+            border-color: rgba(229, 62, 62, 0.3);
+        }
+
+        .btn-danger:hover {
+            background: rgba(229, 62, 62, 0.4);
+        }
+
+        .btn-warning {
+            background: rgba(237, 137, 54, 0.2);
+            border-color: rgba(237, 137, 54, 0.3);
+        }
+
+        .btn-warning:hover {
+            background: rgba(237, 137, 54, 0.4);
+        }
+
+        .info-block {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 12px;
+            line-height: 1.6;
+        }
+
+        .info-block strong {
+            color: #667eea;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .info-row:last-child {
+            border-bottom: none;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+        }
+
+        .status-active {
+            background: #38a169;
+            box-shadow: 0 0 8px #38a169;
+        }
+
+        .status-inactive {
+            background: #718096;
+        }
+
+        /* Popup стили */
+        .ol-popup {
+            position: absolute;
+            background: #fff;
+            border-radius: 8px;
+            padding: 12px;
+            min-width: 200px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            pointer-events: auto;
+        }
+
+        .ol-popup-content {
+            font-size: 13px;
+            color: #2d3748;
+        }
+
+        .ol-popup-coords {
+            font-family: monospace;
+            font-size: 12px;
+        }
+
+        /* Стили для heatmap */
+        .legend {
+            margin-top: 10px;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 6px;
+        }
+
+        .legend-gradient {
+            height: 20px;
+            background: linear-gradient(to right, 
+                rgba(56, 161, 105, 0.8),
+                rgba(237, 137, 54, 0.8),
+                rgba(229, 62, 62, 0.8)
+            );
+            border-radius: 4px;
+            margin-bottom: 6px;
+        }
+
+        .legend-labels {
+            display: flex;
+            justify-content: space-between;
+            font-size: 10px;
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        /* Лог событий */
+        .event-log {
+            max-height: 150px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 11px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 6px;
+            padding: 8px;
+        }
+
+        .log-entry {
+            padding: 3px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .log-time {
+            color: #667eea;
+            margin-right: 6px;
+        }
+
+        /* Переключатель слоёв */
+        .layer-switcher {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #fff;
+            border-radius: 8px;
+            padding: 10px;
+            z-index: 1000;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+        }
+
+        .layer-option {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+            font-size: 12px;
+        }
+
+        .layer-option:last-child {
+            margin-bottom: 0;
+        }
+
+        .layer-option input {
+            cursor: pointer;
+        }
+
+        /* Счётчики */
+        .counter-badge {
+            background: #667eea;
+            color: #fff;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        /* Скроллбар */
+        .control-panel::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .control-panel::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.1);
+        }
+
+        .control-panel::-webkit-scrollbar-thumb {
+            background: #667eea;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Карта -->
+        <div id="map"></div>
+
+        <!-- Переключатель слоёв на карте -->
+        <div class="layer-switcher">
+            <div class="layer-option">
+                <input type="radio" name="baseLayer" value="osm" checked onchange="changeBaseLayer('osm')">
+                <label>OSM</label>
+            </div>
+            <div class="layer-option">
+                <input type="radio" name="baseLayer" value="satellite" onchange="changeBaseLayer('satellite')">
+                <label>Спутник</label>
+            </div>
+            <div class="layer-option">
+                <input type="radio" name="baseLayer" value="terrain" onchange="changeBaseLayer('terrain')">
+                <label>Рельеф</label>
+            </div>
+        </div>
+
+        <!-- Панель управления -->
+        <div class="control-panel">
+            <div class="panel-title">
+                <i class="fas fa-map-marked-alt"></i>
+                <span>OpenLayers Features</span>
+            </div>
+
+            <!-- Базовые контролы -->
+            <div class="section">
+                <div class="section-title">
+                    <i class="fas fa-sliders-h"></i>
+                    <span>Контролы карты</span>
+                </div>
+                <div class="btn-group">
+                    <button class="btn" onclick="toggleScaleLine()" id="btnScaleLine">
+                        <i class="fas fa-ruler"></i>
+                        <span>Масштаб</span>
+                    </button>
+                    <button class="btn" onclick="toggleMousePosition()" id="btnMousePos">
+                        <i class="fas fa-crosshairs"></i>
+                        <span>Координаты</span>
+                    </button>
+                    <button class="btn" onclick="toggleOverviewMap()" id="btnOverview">
+                        <i class="fas fa-map"></i>
+                        <span>Мини-карта</span>
+                    </button>
+                    <button class="btn" onclick="toggleZoomSlider()" id="btnZoomSlider">
+                        <i class="fas fa-search-plus"></i>
+                        <span>Zoom Slider</span>
+                    </button>
+                    <button class="btn" onclick="toggleFullScreen()">
+                        <i class="fas fa-expand"></i>
+                        <span>На весь экран</span>
+                    </button>
+                </div>
+                <div class="info-block" style="margin-top: 10px;">
+                    <div class="info-row">
+                        <span>Zoom:</span>
+                        <strong id="zoomLevel">10</strong>
+                    </div>
+                    <div class="info-row">
+                        <span>Центр:</span>
+                        <strong id="centerCoords">55.75, 37.62</strong>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Интерактивность -->
+            <div class="section">
+                <div class="section-title">
+                    <i class="fas fa-mouse-pointer"></i>
+                    <span>Интерактивность</span>
+                    <span class="counter-badge" id="interactionCount">0</span>
+                </div>
+                <div class="btn-group">
+                    <button class="btn" onclick="enableDrawPoint()" id="btnDrawPoint">
+                        <i class="fas fa-circle"></i>
+                        <span>Точки</span>
+                    </button>
+                    <button class="btn" onclick="enableDrawLine()" id="btnDrawLine">
+                        <i class="fas fa-route"></i>
+                        <span>Линии</span>
+                    </button>
+                    <button class="btn" onclick="enableDrawPolygon()" id="btnDrawPolygon">
+                        <i class="fas fa-draw-polygon"></i>
+                        <span>Полигоны</span>
+                    </button>
+                    <button class="btn btn-warning" onclick="enableModify()" id="btnModify">
+                        <i class="fas fa-edit"></i>
+                        <span>Редактировать</span>
+                    </button>
+                    <button class="btn btn-danger" onclick="enableSelect()" id="btnSelect">
+                        <i class="fas fa-hand-pointer"></i>
+                        <span>Выделение</span>
+                    </button>
+                    <button class="btn" onclick="enableSnap()" id="btnSnap">
+                        <i class="fas fa-magnet"></i>
+                        <span>Привязка</span>
+                    </button>
+                </div>
+                <div class="info-block" style="margin-top: 10px;">
+                    <div class="info-row">
+                        <span>Точки:</span>
+                        <strong id="pointCount">0</strong>
+                    </div>
+                    <div class="info-row">
+                        <span>Линии:</span>
+                        <strong id="lineCount">0</strong>
+                    </div>
+                    <div class="info-row">
+                        <span>Полигоны:</span>
+                        <strong id="polygonCount">0</strong>
+                    </div>
+                </div>
+                <div class="btn-group" style="margin-top: 10px;">
+                    <button class="btn btn-danger" onclick="clearAllFeatures()">
+                        <i class="fas fa-trash"></i>
+                        <span>Очистить всё</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Визуализация -->
+            <div class="section">
+                <div class="section-title">
+                    <i class="fas fa-chart-area"></i>
+                    <span>Визуализация</span>
+                </div>
+                <div class="btn-group">
+                    <button class="btn" onclick="toggleHeatmap()" id="btnHeatmap">
+                        <i class="fas fa-fire"></i>
+                        <span>Heatmap</span>
+                    </button>
+                    <button class="btn" onclick="toggleCluster()" id="btnCluster">
+                        <i class="fas fa-object-group"></i>
+                        <span>Кластеры</span>
+                    </button>
+                    <button class="btn" onclick="addRandomMarkers()" id="btnMarkers">
+                        <i class="fas fa-map-marker-alt"></i>
+                        <span>Маркеры (50)</span>
+                    </button>
+                    <button class="btn" onclick="addRiskZones()" id="btnRiskZones">
+                        <i class="fas fa-bullseye"></i>
+                        <span>Зоны риска</span>
+                    </button>
+                </div>
+                <div class="legend" id="heatmapLegend" style="display: none; margin-top: 10px;">
+                    <div class="legend-gradient"></div>
+                    <div class="legend-labels">
+                        <span>Низкий</span>
+                        <span>Средний</span>
+                        <span>Высокий</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- WebGL и WMS -->
+            <div class="section">
+                <div class="section-title">
+                    <i class="fas fa-layer-group"></i>
+                    <span>WebGL / WMS</span>
+                </div>
+                <div class="btn-group">
+                    <button class="btn" onclick="toggleWebGLPoints()" id="btnWebGL">
+                        <i class="fas fa-microchip"></i>
+                        <span>WebGL Точки</span>
+                    </button>
+                    <button class="btn" onclick="toggleWMSRadar()" id="btnWMS">
+                        <i class="fas fa-satellite"></i>
+                        <span>WMS Радар</span>
+                    </button>
+                    <button class="btn" onclick="toggleGraticule()" id="btnGraticule">
+                        <i class="fas fa-th"></i>
+                        <span>Сетка</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Анимация погоды -->
+            <div class="section">
+                <div class="section-title">
+                    <i class="fas fa-wind"></i>
+                    <span>Анимация погоды</span>
+                </div>
+                <div class="btn-group">
+                    <button class="btn" onclick="toggleWindAnimation()" id="btnWindAnim">
+                        <i class="fas fa-wind"></i>
+                        <span>Ветер</span>
+                    </button>
+                    <button class="btn" onclick="togglePrecipAnimation()" id="btnPrecipAnim">
+                        <i class="fas fa-cloud-rain"></i>
+                        <span>Осадки</span>
+                    </button>
+                    <button class="btn btn-danger" onclick="stopAllAnimations()">
+                        <i class="fas fa-stop"></i>
+                        <span>Стоп</span>
+                    </button>
+                </div>
+                <div class="info-block" style="margin-top: 10px;">
+                    <div class="info-row">
+                        <span>Ветер:</span>
+                        <strong id="windSpeedDisplay">0 м/с</strong>
+                    </div>
+                    <div class="info-row">
+                        <span>Направление:</span>
+                        <strong id="windDirDisplay">0°</strong>
+                    </div>
+                    <div class="info-row">
+                        <span>Осадки:</span>
+                        <strong id="precipIntensityDisplay">0 мм/ч</strong>
+                    </div>
+                </div>
+                <div style="margin-top: 10px;">
+                    <label style="font-size: 10px; color: rgba(255,255,255,0.6);">
+                        <i class="fas fa-wind"></i> Скорость ветра:
+                    </label>
+                    <input type="range" id="windSpeedControl" min="0" max="30" value="10" 
+                           style="width: 100%; cursor: pointer; margin-top: 4px;"
+                           oninput="updateWindData()">
+                    <div style="text-align: center; font-size: 10px; color: rgba(255,255,255,0.6);">
+                        <span id="windSpeedValue">10</span> м/с
+                    </div>
+                </div>
+                <div style="margin-top: 10px;">
+                    <label style="font-size: 10px; color: rgba(255,255,255,0.6);">
+                        <i class="fas fa-compass"></i> Направление:
+                    </label>
+                    <input type="range" id="windDirControl" min="0" max="360" value="270" 
+                           style="width: 100%; cursor: pointer; margin-top: 4px;"
+                           oninput="updateWindData()">
+                    <div style="text-align: center; font-size: 10px; color: rgba(255,255,255,0.6);">
+                        <span id="windDirValue">270</span>°
+                    </div>
+                </div>
+                <div style="margin-top: 10px;">
+                    <label style="font-size: 10px; color: rgba(255,255,255,0.6);">
+                        <i class="fas fa-cloud-rain"></i> Интенсивность:
+                    </label>
+                    <input type="range" id="precipIntensityControl" min="0" max="20" value="5" 
+                           style="width: 100%; cursor: pointer; margin-top: 4px;"
+                           oninput="updatePrecipData()">
+                    <div style="text-align: center; font-size: 10px; color: rgba(255,255,255,0.6);">
+                        <span id="precipIntensityValue">5</span> мм/ч
+                    </div>
+                </div>
+            </div>
+
+            <!-- Измерения -->
+            <div class="section">
+                <div class="section-title">
+                    <i class="fas fa-ruler-combined"></i>
+                    <span>Измерения</span>
+                </div>
+                <div class="btn-group">
+                    <button class="btn" onclick="enableMeasureDistance()" id="btnMeasureDist">
+                        <i class="fas fa-ruler-horizontal"></i>
+                        <span>Расстояние</span>
+                    </button>
+                    <button class="btn" onclick="enableMeasureArea()" id="btnMeasureArea">
+                        <i class="fas fa-ruler-vertical"></i>
+                        <span>Площадь</span>
+                    </button>
+                    <button class="btn btn-danger" onclick="clearMeasurements()">
+                        <i class="fas fa-trash"></i>
+                        <span>Очистить</span>
+                    </button>
+                </div>
+                <div class="info-block" style="margin-top: 10px;">
+                    <div class="info-row">
+                        <span>Последнее:</span>
+                        <strong id="lastMeasurement">—</strong>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Временной слайдер -->
+            <div class="section">
+                <div class="section-title">
+                    <i class="fas fa-clock"></i>
+                    <span>Время прогноза</span>
+                </div>
+                <div style="margin-bottom: 10px;">
+                    <input type="range" id="timeSlider" min="0" max="23" value="0" 
+                           style="width: 100%; cursor: pointer;" 
+                           oninput="updateTimeSlider(this.value)">
+                    <div style="display: flex; justify-content: space-between; font-size: 11px; color: rgba(255,255,255,0.6); margin-top: 6px;">
+                        <span>00:00</span>
+                        <span id="currentTimeLabel" style="color: #667eea; font-weight: 600;">00:00</span>
+                        <span>23:00</span>
+                    </div>
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-success" onclick="toggleTimeAnimation()" id="btnTimeAnim">
+                        <i class="fas fa-play"></i>
+                        <span>Старт</span>
+                    </button>
+                    <button class="btn" onclick="addTimeForecast()">
+                        <i class="fas fa-cloud"></i>
+                        <span>Данные (24ч)</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Сравнение слоёв -->
+            <div class="section">
+                <div class="section-title">
+                    <i class="fas fa-columns"></i>
+                    <span>Сравнение</span>
+                </div>
+                <div style="margin-bottom: 10px;">
+                    <input type="range" id="swipeSlider" min="0" max="100" value="50" 
+                           style="width: 100%; cursor: pointer;" 
+                           oninput="updateSwipe(this.value)">
+                    <div style="text-align: center; font-size: 11px; color: rgba(255,255,255,0.6); margin-top: 6px;">
+                        <span id="swipeValue">50%</span>
+                    </div>
+                </div>
+                <div class="btn-group">
+                    <button class="btn" onclick="toggleSwipeMode()" id="btnSwipe">
+                        <i class="fas fa-exchange-alt"></i>
+                        <span>Включить</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Анимация -->
+            <div class="section">
+                <div class="section-title">
+                    <i class="fas fa-film"></i>
+                    <span>Анимация</span>
+                </div>
+                <div class="btn-group">
+                    <button class="btn btn-success" onclick="animateToMoscow()">
+                        <i class="fas fa-plane"></i>
+                        <span>Москва</span>
+                    </button>
+                    <button class="btn btn-success" onclick="animateToSPb()">
+                        <i class="fas fa-plane"></i>
+                        <span>СПб</span>
+                    </button>
+                    <button class="btn btn-success" onclick="animateToVladivostok()">
+                        <i class="fas fa-plane"></i>
+                        <span>Владивосток</span>
+                    </button>
+                    <button class="btn" onclick="animateRoute()">
+                        <i class="fas fa-route"></i>
+                        <span>По маршруту</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Экспорт/Импорт -->
+            <div class="section">
+                <div class="section-title">
+                    <i class="fas fa-file-export"></i>
+                    <span>Данные</span>
+                </div>
+                <div class="btn-group">
+                    <button class="btn" onclick="exportToGeoJSON()">
+                        <i class="fas fa-download"></i>
+                        <span>Экспорт GeoJSON</span>
+                    </button>
+                    <button class="btn" onclick="document.getElementById('geojsonInput').click()">
+                        <i class="fas fa-upload"></i>
+                        <span>Импорт GeoJSON</span>
+                    </button>
+                    <input type="file" id="geojsonInput" accept=".json,.geojson" style="display: none;" onchange="importGeoJSON(event)">
+                    <button class="btn" onclick="exportMapImage()" style="margin-top: 8px; width: 100%;">
+                        <i class="fas fa-image"></i>
+                        <span>Экспорт карты (PNG)</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Экспорт PDF -->
+            <div class="section">
+                <div class="section-title">
+                    <i class="fas fa-file-pdf"></i>
+                    <span>Экспорт отчёта</span>
+                </div>
+                <div class="btn-group" style="flex-direction: column;">
+                    <button class="btn" onclick="exportMapImage()" style="width: 100%;">
+                        <i class="fas fa-image"></i>
+                        <span>Экспорт карты (PNG)</span>
+                    </button>
+                    <button class="btn" onclick="generatePDFReport()" style="width: 100%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                        <i class="fas fa-file-pdf"></i>
+                        <span>Экспорт PDF с графиками</span>
+                    </button>
+                </div>
+                <div style="margin-top: 10px; font-size: 10px; color: rgba(255,255,255,0.6);">
+                    <i class="fas fa-info-circle"></i> PDF включает карту, графики и метео-данные
+                </div>
+            </div>
+
+            <!-- Графики для экспорта -->
+            <div class="section" id="chartsSection" style="display: none;">
+                <div class="section-title">
+                    <i class="fas fa-chart-line"></i>
+                    <span>Графики</span>
+                </div>
+                <div id="timeSeriesChart" style="margin-bottom: 15px;"></div>
+                <div id="windRoseChart" style="margin-bottom: 15px;"></div>
+                <div id="turbulenceChart"></div>
+            </div>
+
+            <!-- Лог событий -->
+            <div class="section">
+                <div class="section-title">
+                    <i class="fas fa-terminal"></i>
+                    <span>События</span>
+                </div>
+                <div class="event-log" id="eventLog">
+                    <div class="log-entry">
+                        <span class="log-time">[00:00:00]</span>
+                        <span>Система готова</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Глобальные переменные
+        let map;
+        let layers = {};
+        let sources = {};
+        let interactions = {};
+        let controls = {};
+        let graticule = null;
+        let drawInteraction;
+        let modifyInteraction;
+        let selectInteraction;
+        let snapInteraction;
+        let measureInteraction;
+        let timeAnimationInterval = null;
+        let timeForecastData = [];
+        let swipeEnabled = false;
+        
+        // Анимация погоды
+        let windAnimation = null;
+        let precipAnimation = null;
+        let windCanvas = null;
+        let precipCanvas = null;
+        let windOverlay = null;
+        let precipOverlay = null;
+        let windParticles = [];
+        let rainDrops = [];
+        let windData = { speed: 10, direction: 270 };
+        let precipData = { intensity: 5, type: 'rain' };
+        let windAnimationId = null;
+        let precipAnimationId = null;
+        let showWind = false;
+        let showPrecip = false;
+
+        // Инициализация карты
+        function initMap() {
+            // Источники
+            sources.points = new ol.source.Vector();
+            sources.lines = new ol.source.Vector();
+            sources.polygons = new ol.source.Vector();
+            sources.markers = new ol.source.Vector();
+            sources.riskZones = new ol.source.Vector();
+            sources.heatmap = new ol.source.Vector();
+            sources.cluster = new ol.source.Vector();
+            sources.webgl = new ol.source.Vector();
+            sources.measure = new ol.source.Vector();
+            sources.timeForecast = new ol.source.Vector();
+            sources.wind = new ol.source.Vector();
+            sources.precip = new ol.source.Vector();
+
+            // Базовые слои
+            layers.osm = new ol.layer.Tile({
+                source: new ol.source.OSM(),
+                visible: true,
+                properties: { name: 'OSM' }
+            });
+
+            layers.satellite = new ol.layer.Tile({
+                source: new ol.source.XYZ({
+                    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+                    attributions: 'Tiles © Esri'
+                }),
+                visible: false,
+                properties: { name: 'Satellite' }
+            });
+
+            layers.terrain = new ol.layer.Tile({
+                source: new ol.source.XYZ({
+                    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Terrain_Base/MapServer/tile/{z}/{y}/{x}',
+                    attributions: 'Tiles © Esri'
+                }),
+                visible: false,
+                properties: { name: 'Terrain' }
+            });
+
+            // Слой для сравнения (swipe)
+            layers.satelliteCompare = new ol.layer.Tile({
+                source: new ol.source.XYZ({
+                    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+                    attributions: 'Tiles © Esri'
+                }),
+                visible: false,
+                properties: { name: 'SatelliteCompare' }
+            });
+
+            // Векторные слои
+            layers.points = new ol.layer.Vector({
+                source: sources.points,
+                style: new ol.style.Style({
+                    image: new ol.style.Circle({
+                        radius: 6,
+                        fill: new ol.style.Fill({ color: '#667eea' }),
+                        stroke: new ol.style.Stroke({ color: '#fff', width: 2 })
+                    })
+                })
+            });
+
+            layers.lines = new ol.layer.Vector({
+                source: sources.lines,
+                style: new ol.style.Style({
+                    stroke: new ol.style.Stroke({
+                        color: '#38a169',
+                        width: 3,
+                        lineDash: [10, 5]
+                    }),
+                    image: new ol.style.Circle({
+                        radius: 6,
+                        fill: new ol.style.Fill({ color: '#38a169' })
+                    })
+                })
+            });
+
+            layers.polygons = new ol.layer.Vector({
+                source: sources.polygons,
+                style: new ol.style.Style({
+                    fill: new ol.style.Fill({ color: 'rgba(102, 126, 234, 0.3)' }),
+                    stroke: new ol.style.Stroke({
+                        color: '#667eea',
+                        width: 2
+                    })
+                })
+            });
+
+            layers.markers = new ol.layer.Vector({
+                source: sources.markers,
+                style: function(feature) {
+                    return new ol.style.Style({
+                        image: new ol.style.Icon({
+                            anchor: [0.5, 1],
+                            src: 'data:image/svg+xml,' + encodeURIComponent(`
+                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#e53e3e">
+                                    <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                                </svg>
+                            `),
+                            scale: 0.8
+                        })
+                    });
+                }
+            });
+
+            layers.riskZones = new ol.layer.Vector({
+                source: sources.riskZones,
+                style: function(feature) {
+                    const riskLevel = feature.get('riskLevel');
+                    const colors = {
+                        low: 'rgba(56, 161, 105, 0.3)',
+                        medium: 'rgba(237, 137, 54, 0.3)',
+                        high: 'rgba(229, 62, 62, 0.3)'
+                    };
+                    const strokeColors = {
+                        low: '#38a169',
+                        medium: '#ed8936',
+                        high: '#e53e3e'
+                    };
+                    return new ol.style.Style({
+                        fill: new ol.style.Fill({ color: colors[riskLevel] || colors.low }),
+                        stroke: new ol.style.Stroke({
+                            color: strokeColors[riskLevel] || strokeColors.low,
+                            width: 2,
+                            lineDash: [5, 5]
+                        })
+                    });
+                }
+            });
+
+            // Тепловая карта
+            layers.heatmap = new ol.layer.Heatmap({
+                source: sources.heatmap,
+                blur: 15,
+                radius: 20,
+                visible: false,
+                weight: 'weight'
+            });
+
+            // Кластеризация
+            layers.cluster = new ol.layer.Vector({
+                source: new ol.source.Cluster({
+                    distance: 40,
+                    source: sources.cluster
+                }),
+                style: function(feature) {
+                    const size = feature.get('features').length;
+                    return new ol.style.Style({
+                        image: new ol.style.Circle({
+                            radius: size > 9 ? 15 : 12,
+                            fill: new ol.style.Fill({ color: '#667eea' }),
+                            stroke: new ol.style.Stroke({ color: '#fff', width: 2 })
+                        }),
+                        text: new ol.style.Text({
+                            text: size.toString(),
+                            font: 'bold 12px sans-serif',
+                            fill: new ol.style.Fill({ color: '#fff' })
+                        })
+                    });
+                },
+                visible: false
+            });
+
+            // WebGL слой для точек
+            layers.webgl = new ol.layer.WebGLPoints({
+                source: sources.webgl,
+                style: {
+                    variables: {
+                        windSpeed: ['get', 'windSpeed'],
+                        temp: ['get', 'temp']
+                    },
+                    'circle-radius': 8,
+                    'circle-fill-color': [
+                        'interpolate', ['linear'], ['var', 'windSpeed'],
+                        0, [0, 128, 0, 0.8],
+                        10, [255, 165, 0, 0.8],
+                        20, [255, 0, 0, 0.8]
+                    ],
+                    'circle-stroke-color': '#fff',
+                    'circle-stroke-width': 2
+                },
+                visible: false
+            });
+
+            // WMS слой (радар)
+            layers.wmsRadar = new ol.layer.Image({
+                source: new ol.source.ImageWMS({
+                    url: 'https://mesonet.agron.iastate.edu/cgi-bin/wms/nexrad/n0r.cgi',
+                    params: {
+                        'LAYERS': 'nexrad-n0r-900913',
+                        'FORMAT': 'image/png'
+                    },
+                    ratio: 1,
+                    serverType: 'geoserver'
+                }),
+                visible: false,
+                opacity: 0.7
+            });
+
+            // Слой измерений
+            layers.measure = new ol.layer.Vector({
+                source: sources.measure,
+                style: new ol.style.Style({
+                    stroke: new ol.style.Stroke({
+                        color: '#e53e3e',
+                        width: 3,
+                        lineDash: [5, 5]
+                    }),
+                    fill: new ol.style.Fill({
+                        color: 'rgba(229, 62, 62, 0.2)'
+                    }),
+                    image: new ol.style.Circle({
+                        radius: 6,
+                        fill: new ol.style.Fill({ color: '#e53e3e' })
+                    }),
+                    text: new ol.style.Text({
+                        font: 'bold 12px sans-serif',
+                        fill: '#e53e3e',
+                        offsetY: -10,
+                        backgroundFill: new ol.style.Fill({ color: 'rgba(255,255,255,0.8)' }),
+                        backgroundStroke: new ol.style.Stroke({ color: '#e53e3e', width: 1 }),
+                        padding: [4, 4, 4, 4]
+                    })
+                })
+            });
+
+            // Слой временного прогноза
+            layers.timeForecast = new ol.layer.Vector({
+                source: sources.timeForecast,
+                style: new ol.style.Style({
+                    image: new ol.style.Circle({
+                        radius: 10,
+                        fill: new ol.style.Fill({ color: '#667eea' }),
+                        stroke: new ol.style.Stroke({ color: '#fff', width: 2 })
+                    }),
+                    text: new ol.style.Text({
+                        font: 'bold 11px sans-serif',
+                        fill: '#fff',
+                        offsetY: 25,
+                        backgroundFill: new ol.style.Fill({ color: 'rgba(0,0,0,0.7)' }),
+                        padding: [3, 6, 3, 6]
+                    })
+                }),
+                visible: false
+            });
+
+            // Слой анимации ветра (Canvas overlay)
+            layers.windAnimation = new ol.layer.Vector({
+                source: sources.wind,
+                style: new ol.style.Style({
+                    stroke: new ol.style.Stroke({
+                        color: 'rgba(255, 255, 255, 0.6)',
+                        width: 2,
+                        lineCap: 'round'
+                    })
+                }),
+                visible: false,
+                opacity: 0.8,
+                renderBuffer: 100
+            });
+
+            // Слой анимации осадков (Canvas overlay)
+            layers.precipAnimation = new ol.layer.Vector({
+                source: sources.precip,
+                style: new ol.style.Style({
+                    image: new ol.style.Circle({
+                        radius: 3,
+                        fill: new ol.style.Fill({ color: 'rgba(102, 126, 234, 0.8)' }),
+                        stroke: new ol.style.Stroke({ color: 'rgba(255, 255, 255, 0.5)', width: 1 })
+                    })
+                }),
+                visible: false,
+                opacity: 0.7,
+                renderBuffer: 100
+            });
+
+            // Представление
+            const view = new ol.View({
+                center: ol.proj.fromLonLat([37.6173, 55.7558]),
+                zoom: 10,
+                minZoom: 3,
+                maxZoom: 18
+            });
+
+            // Карта
+            map = new ol.Map({
+                target: 'map',
+                layers: [
+                    layers.osm, layers.satellite, layers.terrain, layers.satelliteCompare,
+                    layers.wmsRadar, layers.webgl, layers.timeForecast,
+                    layers.windAnimation, layers.precipAnimation,
+                    layers.heatmap, layers.cluster,
+                    layers.riskZones, layers.polygons, layers.lines, layers.points, layers.markers, layers.measure
+                ],
+                view: view,
+                controls: ol.control.defaults.defaults({
+                    zoom: true,
+                    attribution: true
+                })
+            });
+
+            // Добавляем контролы
+            addControls();
+
+            // Обработчики событий карты
+            map.on('moveend', onMapMove);
+            map.on('click', onMapClick);
+
+            // Postcompose для отрисовки анимации на Canvas (используем precompose для совместимости)
+            map.on('precompose', renderWeatherAnimation);
+            
+            // Запускаем цикл анимации
+            startAnimationLoop();
+
+            logEvent('Карта инициализирована');
+            updateFeatureCounts();
+        }
+        
+        // Цикл анимации
+        function startAnimationLoop() {
+            function animate() {
+                if (showWind || showPrecip) {
+                    map.render();
+                }
+                requestAnimationFrame(animate);
+            }
+            animate();
+        }
+
+        // Добавление контролов
+        function addControls() {
+            // Масштабная линейка
+            controls.scaleLine = new ol.control.ScaleLine({
+                units: 'metric',
+                bar: true,
+                steps: 4,
+                text: true,
+                minWidth: 100
+            });
+            map.addControl(controls.scaleLine);
+
+            // Позиция мыши
+            controls.mousePosition = new ol.control.MousePosition({
+                coordinateFormat: ol.coordinate.createStringXY(4),
+                projection: 'EPSG:4326',
+                undefinedHTML: '—'
+            });
+            map.addControl(controls.mousePosition);
+
+            // Мини-карта
+            controls.overviewMap = new ol.control.OverviewMap({
+                layers: [new ol.layer.Tile({ source: new ol.source.OSM() })],
+                collapsed: true
+            });
+            map.addControl(controls.overviewMap);
+
+            // Zoom slider
+            controls.zoomSlider = new ol.control.ZoomSlider();
+            map.addControl(controls.zoomSlider);
+
+            // Full screen
+            controls.fullScreen = new ol.control.FullScreen();
+            map.addControl(controls.fullScreen);
+
+            logEvent('Контролы добавлены');
+        }
+
+        // Изменение базового слоя
+        function changeBaseLayer(layerName) {
+            Object.keys(layers).forEach(key => {
+                if (['osm', 'satellite', 'terrain'].includes(key)) {
+                    layers[key].setVisible(key === layerName);
+                }
+            });
+            logEvent(`Слой переключен: ${layerName}`);
+        }
+
+        // Переключение контролов
+        function toggleScaleLine() {
+            const visible = !controls.scaleLine.getMap();
+            if (visible) {
+                map.addControl(controls.scaleLine);
+            } else {
+                map.removeControl(controls.scaleLine);
+            }
+            document.getElementById('btnScaleLine').classList.toggle('active', visible);
+            logEvent(`Масштабная линейка: ${visible ? 'вкл' : 'выкл'}`);
+        }
+
+        function toggleMousePosition() {
+            const visible = !controls.mousePosition.getMap();
+            if (visible) {
+                map.addControl(controls.mousePosition);
+            } else {
+                map.removeControl(controls.mousePosition);
+            }
+            document.getElementById('btnMousePos').classList.toggle('active', visible);
+            logEvent(`Координаты мыши: ${visible ? 'вкл' : 'выкл'}`);
+        }
+
+        function toggleOverviewMap() {
+            const visible = !controls.overviewMap.getMap();
+            if (visible) {
+                map.addControl(controls.overviewMap);
+            } else {
+                map.removeControl(controls.overviewMap);
+            }
+            document.getElementById('btnOverview').classList.toggle('active', visible);
+            logEvent(`Мини-карта: ${visible ? 'вкл' : 'выкл'}`);
+        }
+
+        function toggleZoomSlider() {
+            const visible = !controls.zoomSlider.getMap();
+            if (visible) {
+                map.addControl(controls.zoomSlider);
+            } else {
+                map.removeControl(controls.zoomSlider);
+            }
+            document.getElementById('btnZoomSlider').classList.toggle('active', visible);
+            logEvent(`Zoom slider: ${visible ? 'вкл' : 'выкл'}`);
+        }
+
+        function toggleFullScreen() {
+            const container = document.querySelector('.container');
+            if (!document.fullscreenElement) {
+                container.requestFullscreen().catch(err => {
+                    logEvent(`Ошибка full screen: ${err.message}`);
+                });
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        // Обновление информации о карте
+        function onMapMove() {
+            const view = map.getView();
+            const zoom = view.getZoom();
+            const center = ol.proj.toLonLat(view.getCenter());
+
+            document.getElementById('zoomLevel').textContent = zoom.toFixed(1);
+            document.getElementById('centerCoords').textContent = 
+                `${center[1].toFixed(2)}, ${center[0].toFixed(2)}`;
+        }
+
+        // Рисование
+        function enableDrawPoint() {
+            resetInteractions();
+            drawInteraction = new ol.interaction.Draw({
+                source: sources.points,
+                type: 'Point'
+            });
+            map.addInteraction(drawInteraction);
+            drawInteraction.on('drawend', () => {
+                updateFeatureCounts();
+                logEvent('Точка добавлена');
+            });
+            setActiveButton('btnDrawPoint');
+            updateInteractionCount(1);
+        }
+
+        function enableDrawLine() {
+            resetInteractions();
+            drawInteraction = new ol.interaction.Draw({
+                source: sources.lines,
+                type: 'LineString'
+            });
+            map.addInteraction(drawInteraction);
+            drawInteraction.on('drawend', () => {
+                updateFeatureCounts();
+                logEvent('Линия добавлена');
+            });
+            setActiveButton('btnDrawLine');
+            updateInteractionCount(1);
+        }
+
+        function enableDrawPolygon() {
+            resetInteractions();
+            drawInteraction = new ol.interaction.Draw({
+                source: sources.polygons,
+                type: 'Polygon'
+            });
+            map.addInteraction(drawInteraction);
+            drawInteraction.on('drawend', () => {
+                updateFeatureCounts();
+                logEvent('Полигон добавлен');
+            });
+            setActiveButton('btnDrawPolygon');
+            updateInteractionCount(1);
+        }
+
+        // Редактирование
+        function enableModify() {
+            resetInteractions();
+            modifyInteraction = new ol.interaction.Modify({
+                features: new ol.Collection([
+                    ...sources.points.getFeatures(),
+                    ...sources.lines.getFeatures(),
+                    ...sources.polygons.getFeatures()
+                ])
+            });
+            map.addInteraction(modifyInteraction);
+            setActiveButton('btnModify');
+            updateInteractionCount(1);
+            logEvent('Режим редактирования включён');
+        }
+
+        // Выделение
+        function enableSelect() {
+            resetInteractions();
+            selectInteraction = new ol.interaction.Select({
+                layers: [layers.points, layers.lines, layers.polygons]
+            });
+            map.addInteraction(selectInteraction);
+            selectInteraction.on('select', (e) => {
+                const selected = e.target.getFeatures().getLength();
+                logEvent(`Выделено объектов: ${selected}`);
+            });
+            setActiveButton('btnSelect');
+            updateInteractionCount(1);
+        }
+
+        // Привязка
+        function enableSnap() {
+            if (!snapInteraction) {
+                snapInteraction = new ol.interaction.Snap({
+                    source: new ol.source.Vector({
+                        features: [
+                            ...sources.points.getFeatures(),
+                            ...sources.lines.getFeatures(),
+                            ...sources.polygons.getFeatures()
+                        ]
+                    })
+                });
+            }
+            map.addInteraction(snapInteraction);
+            setActiveButton('btnSnap');
+            updateInteractionCount(1);
+            logEvent('Привязка включена');
+        }
+
+        function resetInteractions() {
+            if (drawInteraction) {
+                map.removeInteraction(drawInteraction);
+                drawInteraction = null;
+            }
+            if (modifyInteraction) {
+                map.removeInteraction(modifyInteraction);
+                modifyInteraction = null;
+            }
+            if (selectInteraction) {
+                map.removeInteraction(selectInteraction);
+                selectInteraction = null;
+            }
+            if (snapInteraction) {
+                map.removeInteraction(snapInteraction);
+                snapInteraction = null;
+            }
+            updateInteractionCount(0);
+            clearActiveButtons();
+        }
+
+        function setActiveButton(btnId) {
+            clearActiveButtons();
+            document.getElementById(btnId).classList.add('active');
+        }
+
+        function clearActiveButtons() {
+            ['btnDrawPoint', 'btnDrawLine', 'btnDrawPolygon', 'btnModify', 'btnSelect', 'btnSnap']
+                .forEach(id => document.getElementById(id).classList.remove('active'));
+        }
+
+        function updateInteractionCount(count) {
+            document.getElementById('interactionCount').textContent = count;
+        }
+
+        function updateFeatureCounts() {
+            document.getElementById('pointCount').textContent = sources.points.getFeatures().length;
+            document.getElementById('lineCount').textContent = sources.lines.getFeatures().length;
+            document.getElementById('polygonCount').textContent = sources.polygons.getFeatures().length;
+        }
+
+        function clearAllFeatures() {
+            if (confirm('Очистить все объекты?')) {
+                sources.points.clear();
+                sources.lines.clear();
+                sources.polygons.clear();
+                sources.markers.clear();
+                sources.riskZones.clear();
+                sources.heatmap.clear();
+                sources.cluster.clear();
+                resetInteractions();
+                updateFeatureCounts();
+                logEvent('Все объекты очищены');
+            }
+        }
+
+        function onMapClick(evt) {
+            const coord = ol.proj.toLonLat(evt.coordinate);
+            const features = map.getFeaturesAtPixel(evt.pixel);
+            
+            if (features && features.length > 0) {
+                const props = features[0].getProperties();
+                let content = '<div class="ol-popup-coords">';
+                content += `<strong>Тип:</strong> ${features[0].getGeometry().getType()}<br>`;
+                if (props.riskLevel) {
+                    content += `<strong>Риск:</strong> ${props.riskLevel}<br>`;
+                }
+                content += `<strong>Координаты:</strong><br>${coord[1].toFixed(4)}, ${coord[0].toFixed(4)}`;
+                content += '</div>';
+                showPopup(evt.coordinate, content);
+            }
+        }
+
+        // Popup
+        let popupOverlay;
+        function showPopup(coordinate, content) {
+            if (!popupOverlay) {
+                const container = document.createElement('div');
+                container.className = 'ol-popup';
+                container.id = 'popup';
+                
+                const contentDiv = document.createElement('div');
+                contentDiv.className = 'ol-popup-content';
+                container.appendChild(contentDiv);
+                
+                const closer = document.createElement('div');
+                closer.className = 'ol-popup-closer';
+                closer.innerHTML = '×';
+                closer.style.cssText = 'position: absolute; top: 2px; right: 5px; cursor: pointer; font-size: 18px; color: #666;';
+                closer.onclick = () => {
+                    popupOverlay.setPosition(undefined);
+                    return false;
+                };
+                container.appendChild(closer);
+                
+                popupOverlay = new ol.Overlay({
+                    element: container,
+                    autoPan: true,
+                    autoPanAnimation: { duration: 250 }
+                });
+                map.addOverlay(popupOverlay);
+            }
+            
+            popupOverlay.setPosition(coordinate);
+            popupOverlay.getElement().querySelector('.ol-popup-content').innerHTML = content;
+        }
+
+        // Тепловая карта
+        function toggleHeatmap() {
+            const visible = !layers.heatmap.getVisible();
+            layers.heatmap.setVisible(visible);
+            document.getElementById('btnHeatmap').classList.toggle('active', visible);
+            document.getElementById('heatmapLegend').style.display = visible ? 'block' : 'none';
+            
+            if (visible && sources.heatmap.getFeatures().length === 0) {
+                // Генерируем случайные точки для heatmap
+                for (let i = 0; i < 100; i++) {
+                    const lon = 37.6173 + (Math.random() - 0.5) * 1;
+                    const lat = 55.7558 + (Math.random() - 0.5) * 1;
+                    const feature = new ol.Feature({
+                        geometry: new ol.geom.Point(ol.proj.fromLonLat([lon, lat])),
+                        weight: Math.random()
+                    });
+                    sources.heatmap.addFeature(feature);
+                }
+            }
+            
+            logEvent(`Heatmap: ${visible ? 'вкл' : 'выкл'}`);
+        }
+
+        // Кластеризация
+        function toggleCluster() {
+            const visible = !layers.cluster.getVisible();
+            layers.cluster.setVisible(visible);
+            document.getElementById('btnCluster').classList.toggle('active', visible);
+            
+            if (visible && sources.cluster.getFeatures().length === 0) {
+                addRandomMarkersToCluster();
+            }
+            
+            logEvent(`Кластеры: ${visible ? 'вкл' : 'выкл'}`);
+        }
+
+        function addRandomMarkersToCluster() {
+            for (let i = 0; i < 50; i++) {
+                const lon = 37.6173 + (Math.random() - 0.5) * 0.5;
+                const lat = 55.7558 + (Math.random() - 0.5) * 0.5;
+                const feature = new ol.Feature({
+                    geometry: new ol.geom.Point(ol.proj.fromLonLat([lon, lat]))
+                });
+                sources.cluster.addFeature(feature);
+            }
+        }
+
+        // Маркеры
+        function addRandomMarkers() {
+            sources.markers.clear();
+            for (let i = 0; i < 50; i++) {
+                const lon = 37.6173 + (Math.random() - 0.5) * 0.8;
+                const lat = 55.7558 + (Math.random() - 0.5) * 0.8;
+                const feature = new ol.Feature({
+                    geometry: new ol.geom.Point(ol.proj.fromLonLat([lon, lat])),
+                    title: `Маркер ${i + 1}`
+                });
+                sources.markers.addFeature(feature);
+            }
+            logEvent('Добавлено 50 маркеров');
+        }
+
+        // Зоны риска
+        function addRiskZones() {
+            sources.riskZones.clear();
+            const riskLevels = ['low', 'medium', 'high'];
+            const center = map.getView().getCenter();
+            
+            for (let i = 0; i < 5; i++) {
+                const riskLevel = riskLevels[Math.floor(Math.random() * riskLevels.length)];
+                const radius = 5000 + Math.random() * 10000;
+                const offsetX = (Math.random() - 0.5) * 20000;
+                const offsetY = (Math.random() - 0.5) * 20000;
+                
+                const circle = ol.geom.Polygon.circular(
+                    [center[0] + offsetX, center[1] + offsetY],
+                    radius,
+                    32
+                );
+                
+                const feature = new ol.Feature({
+                    geometry: circle,
+                    riskLevel: riskLevel
+                });
+                sources.riskZones.addFeature(feature);
+            }
+            logEvent('Зоны риска добавлены');
+        }
+
+        // Анимация
+        function animateToMoscow() {
+            animateView([37.6173, 55.7558], 12);
+        }
+
+        function animateToSPb() {
+            animateView([30.3141, 59.9386], 10);
+        }
+
+        function animateToVladivostok() {
+            animateView([131.8857, 43.1056], 8);
+        }
+
+        function animateView(coords, zoom) {
+            const view = map.getView();
+            const duration = 2000;
+            const start = Date.now();
+            const fromCenter = view.getCenter();
+            const fromZoom = view.getZoom();
+            const toCenter = ol.proj.fromLonLat(coords);
+            
+            function animate() {
+                const elapsed = Date.now() - start;
+                const progress = Math.min(elapsed / duration, 1);
+                const ease = 1 - Math.pow(1 - progress, 3);
+                
+                const currentCenter = [
+                    fromCenter[0] + (toCenter[0] - fromCenter[0]) * ease,
+                    fromCenter[1] + (toCenter[1] - fromCenter[1]) * ease
+                ];
+                const currentZoom = fromZoom + (zoom - fromZoom) * ease;
+                
+                view.setCenter(currentCenter);
+                view.setZoom(currentZoom);
+                
+                if (progress < 1) {
+                    requestAnimationFrame(animate);
+                } else {
+                    logEvent(`Анимация: ${coords[1].toFixed(2)}, ${coords[0].toFixed(2)}`);
+                }
+            }
+            animate();
+        }
+
+        function animateRoute() {
+            const route = [
+                [37.6173, 55.7558], // Москва
+                [30.3141, 59.9386], // СПб
+                [37.6173, 55.7558]  // Обратно
+            ];
+            
+            let index = 0;
+            const view = map.getView();
+            
+            function nextPoint() {
+                if (index >= route.length) {
+                    index = 0;
+                }
+                animateView(route[index], 10);
+                index++;
+                setTimeout(nextPoint, 3000);
+            }
+            nextPoint();
+            
+            logEvent('Анимация по маршруту запущена');
+        }
+
+        // Экспорт/Импорт
+        function exportToGeoJSON() {
+            const format = new ol.format.GeoJSON();
+            const features = [
+                ...sources.points.getFeatures(),
+                ...sources.lines.getFeatures(),
+                ...sources.polygons.getFeatures()
+            ];
+            
+            if (features.length === 0) {
+                alert('Нет объектов для экспорта');
+                return;
+            }
+            
+            const geojson = format.writeFeaturesObject(features);
+            const blob = new Blob([JSON.stringify(geojson, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'map-features.geojson';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            logEvent('Экспорт GeoJSON выполнен');
+        }
+
+        function importGeoJSON(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                try {
+                    const geojson = JSON.parse(e.target.result);
+                    const format = new ol.format.GeoJSON();
+                    const features = format.readFeatures(geojson, {
+                        featureProjection: 'EPSG:3857'
+                    });
+                    
+                    features.forEach(feature => {
+                        const geom = feature.getGeometry();
+                        if (geom.getType() === 'Point') {
+                            sources.points.addFeature(feature);
+                        } else if (geom.getType() === 'LineString') {
+                            sources.lines.addFeature(feature);
+                        } else if (geom.getType() === 'Polygon') {
+                            sources.polygons.addFeature(feature);
+                        }
+                    });
+                    
+                    updateFeatureCounts();
+                    logEvent('Импорт GeoJSON выполнен');
+                } catch (error) {
+                    alert('Ошибка импорта: ' + error.message);
+                    logEvent('Ошибка импорта GeoJSON');
+                }
+            };
+            reader.readAsText(file);
+            event.target.value = '';
+        }
+
+        // Уведомления (toast)
+        let toastTimeout;
+        function showToast(message, type = 'info') {
+            let toast = document.getElementById('toast');
+            
+            if (!toast) {
+                toast = document.createElement('div');
+                toast.id = 'toast';
+                toast.className = 'toast';
+                toast.style.cssText = `
+                    position: fixed;
+                    bottom: 20px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                    color: #fff;
+                    padding: 12px 24px;
+                    border-radius: 8px;
+                    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+                    z-index: 10000;
+                    font-size: 14px;
+                    opacity: 0;
+                    transition: opacity 0.3s;
+                `;
+                document.body.appendChild(toast);
+            }
+            
+            const colors = {
+                info: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                success: 'linear-gradient(135deg, #38a169 0%, #38a169 100%)',
+                error: 'linear-gradient(135deg, #e53e3e 0%, #c53030 100%)',
+                warning: 'linear-gradient(135deg, #ed8936 0%, #dd6b20 100%)'
+            };
+            
+            const icons = {
+                info: '<i class="fas fa-info-circle"></i>',
+                success: '<i class="fas fa-check-circle"></i>',
+                error: '<i class="fas fa-exclamation-circle"></i>',
+                warning: '<i class="fas fa-exclamation-triangle"></i>'
+            };
+            
+            toast.style.background = colors[type] || colors.info;
+            toast.innerHTML = `${icons[type] || icons.info} <span style="margin-left: 8px;">${message}</span>`;
+            toast.style.opacity = '1';
+            
+            clearTimeout(toastTimeout);
+            toastTimeout = setTimeout(() => {
+                toast.style.opacity = '0';
+            }, 3000);
+        }
+
+        // Логирование
+        function logEvent(message) {
+            const log = document.getElementById('eventLog');
+            const now = new Date();
+            const time = now.toTimeString().split(' ')[0];
+
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.innerHTML = `<span class="log-time">[${time}]</span><span>${message}</span>`;
+
+            log.insertBefore(entry, log.firstChild);
+
+            // Ограничиваем количество записей
+            while (log.children.length > 50) {
+                log.removeChild(log.lastChild);
+            }
+        }
+
+        // ========== WebGL Точки ==========
+        function toggleWebGLPoints() {
+            const visible = !layers.webgl.getVisible();
+            layers.webgl.setVisible(visible);
+            document.getElementById('btnWebGL').classList.toggle('active', visible);
+            
+            if (visible && sources.webgl.getFeatures().length === 0) {
+                // Генерируем случайные точки с данными о ветре
+                for (let i = 0; i < 200; i++) {
+                    const lon = 37.6173 + (Math.random() - 0.5) * 2;
+                    const lat = 55.7558 + (Math.random() - 0.5) * 2;
+                    const feature = new ol.Feature({
+                        geometry: new ol.geom.Point(ol.proj.fromLonLat([lon, lat])),
+                        windSpeed: Math.random() * 25,
+                        temp: Math.random() * 30 - 10
+                    });
+                    sources.webgl.addFeature(feature);
+                }
+                logEvent('WebGL точки: 200 точек добавлено');
+            }
+            
+            logEvent(`WebGL Points: ${visible ? 'вкл' : 'выкл'}`);
+        }
+
+        // ========== WMS Радар ==========
+        function toggleWMSRadar() {
+            const visible = !layers.wmsRadar.getVisible();
+            layers.wmsRadar.setVisible(visible);
+            document.getElementById('btnWMS').classList.toggle('active', visible);
+            
+            if (visible) {
+                // Обновляем параметр TIME для актуальных данных
+                const time = new Date().toISOString().slice(0, 16);
+                layers.wmsRadar.getSource().updateParams({ 'TIME': time });
+            }
+            
+            logEvent(`WMS Радар: ${visible ? 'вкл' : 'выкл'}`);
+        }
+
+        // ========== Graticule (координатная сетка) ==========
+        function toggleGraticule() {
+            if (!graticule) {
+                graticule = new ol.layer.Graticule({
+                    map: map,
+                    strokeStyle: new ol.style.Stroke({
+                        color: 'rgba(255, 120, 0, 0.9)',
+                        width: 1,
+                        lineDash: [0.5, 4]
+                    }),
+                    showLabels: true,
+                    lonLabelFormatter: (lon) => lon.toFixed(1) + '°',
+                    latLabelFormatter: (lat) => lat.toFixed(1) + '°',
+                    lonLabelPosition: 'bottom',
+                    latLabelPosition: 'right',
+                    lonGridLines: true,
+                    latGridLines: true
+                });
+            }
+            
+            const visible = graticule.getMap() !== null;
+            if (visible) {
+                graticule.setMap(null);
+            } else {
+                graticule.setMap(map);
+            }
+            
+            document.getElementById('btnGraticule').classList.toggle('active', !visible);
+            logEvent(`Graticule: ${!visible ? 'вкл' : 'выкл'}`);
+        }
+
+        // ========== Измерение расстояний ==========
+        function enableMeasureDistance() {
+            clearMeasurements();
+            resetInteractions();
+            
+            measureInteraction = new ol.interaction.Draw({
+                source: sources.measure,
+                type: 'LineString'
+            });
+            
+            measureInteraction.on('drawend', (e) => {
+                const geom = e.feature.getGeometry();
+                const length = ol.sphere.getLength(geom);
+                const label = (length / 1000).toFixed(2) + ' км';
+                
+                e.feature.set('label', label);
+                document.getElementById('lastMeasurement').textContent = `Дистанция: ${label}`;
+                
+                // Добавляем tooltip
+                const coords = geom.getLastCoordinate();
+                const tooltip = new ol.Overlay({
+                    element: createMeasurementTooltip(label),
+                    position: coords,
+                    positioning: 'bottom-center',
+                    offset: [0, -10]
+                });
+                map.addOverlay(tooltip);
+                e.feature.set('tooltip', tooltip);
+                
+                logEvent(`Измерение: ${label}`);
+            });
+            
+            map.addInteraction(measureInteraction);
+            document.getElementById('btnMeasureDist').classList.add('active');
+            logEvent('Режим измерения расстояния включён');
+        }
+
+        // ========== Измерение площади ==========
+        function enableMeasureArea() {
+            clearMeasurements();
+            resetInteractions();
+            
+            measureInteraction = new ol.interaction.Draw({
+                source: sources.measure,
+                type: 'Polygon'
+            });
+            
+            measureInteraction.on('drawend', (e) => {
+                const geom = e.feature.getGeometry();
+                const area = ol.sphere.getArea(geom);
+                let label;
+                
+                if (area > 1000000) {
+                    label = (area / 1000000).toFixed(2) + ' км²';
+                } else {
+                    label = area.toFixed(0) + ' м²';
+                }
+                
+                e.feature.set('label', label);
+                document.getElementById('lastMeasurement').textContent = `Площадь: ${label}`;
+                
+                logEvent(`Измерение площади: ${label}`);
+            });
+            
+            map.addInteraction(measureInteraction);
+            document.getElementById('btnMeasureArea').classList.add('active');
+            logEvent('Режим измерения площади включён');
+        }
+
+        function clearMeasurements() {
+            sources.measure.clear();
+            document.getElementById('lastMeasurement').textContent = '—';
+            document.getElementById('btnMeasureDist').classList.remove('active');
+            document.getElementById('btnMeasureArea').classList.remove('active');
+            
+            if (measureInteraction) {
+                map.removeInteraction(measureInteraction);
+                measureInteraction = null;
+            }
+            
+            logEvent('Измерения очищены');
+        }
+
+        function createMeasurementTooltip(text) {
+            const el = document.createElement('div');
+            el.className = 'ol-popup';
+            el.style.cssText = 'background: #e53e3e; color: #fff; border-radius: 4px; padding: 4px 8px; font-size: 11px; font-weight: bold; white-space: nowrap;';
+            el.textContent = text;
+            return el;
+        }
+
+        // ========== Временной слайдер ==========
+        function addTimeForecast() {
+            sources.timeForecast.clear();
+            timeForecastData = [];
+            
+            const center = map.getView().getCenter();
+            const baseLonLat = ol.proj.toLonLat(center);
+            
+            for (let hour = 0; hour < 24; hour++) {
+                const offset = hour * 50;
+                const feature = new ol.Feature({
+                    geometry: new ol.geom.Point([center[0] + offset, center[1]]),
+                    hour: hour,
+                    temp: Math.round(15 + Math.sin(hour / 4) * 10),
+                    wind: Math.round(5 + Math.random() * 15),
+                    precip: Math.round(Math.random() * 10),
+                    visible: hour === 0
+                });
+                
+                timeForecastData.push(feature);
+                
+                if (hour === 0) {
+                    feature.getGeometry().set('hourlyData', {
+                        temp: [15, 16, 18, 20, 22, 23, 24, 23, 21, 19, 17, 16, 15, 14, 13, 12, 11, 10, 11, 13, 14, 15, 15, 14],
+                        wind: [5, 6, 7, 8, 9, 10, 11, 10, 9, 8, 7, 6, 5, 4, 5, 6, 7, 8, 9, 10, 9, 8, 7, 6],
+                        precip: [0, 0, 0, 1, 2, 3, 2, 1, 0, 0, 0, 0, 0, 1, 2, 3, 4, 3, 2, 1, 0, 0, 0, 0]
+                    });
+                    sources.timeForecast.addFeature(feature);
+                }
+            }
+            
+            layers.timeForecast.setVisible(true);
+            logEvent('Данные прогноза на 24ч добавлены');
+        }
+
+        function updateTimeSlider(hour) {
+            hour = parseInt(hour);
+            document.getElementById('currentTimeLabel').textContent = 
+                hour.toString().padStart(2, '0') + ':00';
+            
+            const features = sources.timeForecast.getFeatures();
+            features.forEach(f => {
+                const data = f.getGeometry().get('hourlyData');
+                if (data) {
+                    f.set('temp', data.temp[hour]);
+                    f.set('wind', data.wind[hour]);
+                    f.set('precip', data.precip[hour]);
+                    f.setStyle(new ol.style.Style({
+                        image: new ol.style.Circle({
+                            radius: 10,
+                            fill: new ol.style.Fill({ 
+                                color: data.precip[hour] > 2 ? '#667eea' : '#38a169' 
+                            }),
+                            stroke: new ol.style.Stroke({ color: '#fff', width: 2 })
+                        }),
+                        text: new ol.style.Text({
+                            font: 'bold 11px sans-serif',
+                            fill: '#fff',
+                            offsetY: 25,
+                            backgroundFill: new ol.style.Fill({ color: 'rgba(0,0,0,0.7)' }),
+                            padding: [3, 6, 3, 6],
+                            text: `${data.temp[hour]}° | ${data.wind[hour]} м/с`
+                        })
+                    }));
+                }
+            });
+            
+            logEvent(`Время прогноза: ${hour}:00`);
+        }
+
+        function toggleTimeAnimation() {
+            if (timeAnimationInterval) {
+                clearInterval(timeAnimationInterval);
+                timeAnimationInterval = null;
+                document.getElementById('btnTimeAnim').innerHTML = '<i class="fas fa-play"></i><span>Старт</span>';
+                document.getElementById('btnTimeAnim').classList.remove('active');
+                logEvent('Анимация времени остановлена');
+            } else {
+                let hour = 0;
+                document.getElementById('btnTimeAnim').innerHTML = '<i class="fas fa-pause"></i><span>Пауза</span>';
+                document.getElementById('btnTimeAnim').classList.add('active');
+                
+                timeAnimationInterval = setInterval(() => {
+                    hour = (hour + 1) % 24;
+                    document.getElementById('timeSlider').value = hour;
+                    updateTimeSlider(hour);
+                }, 500);
+                
+                logEvent('Анимация времени запущена');
+            }
+        }
+
+        // ========== Рендеринг анимации погоды на Canvas ==========
+        function renderWeatherAnimation(event) {
+            // Получаем 2D контекст из WebGL
+            const ctx = event.context;
+            
+            // Проверяем, что контекст поддерживает 2D методы
+            if (!ctx || typeof ctx.save !== 'function') {
+                return;
+            }
+            
+            const mapSize = map.getSize();
+            const width = mapSize[0];
+            const height = mapSize[1];
+
+            // Сохраняем контекст
+            ctx.save();
+
+            // Рисуем ветер
+            if (showWind) {
+                renderWind(ctx, width, height);
+            }
+
+            // Рисуем осадки
+            if (showPrecip) {
+                renderPrecip(ctx, width, height);
+            }
+
+            // Восстанавливаем контекст
+            ctx.restore();
+        }
+        
+        function renderWind(ctx, width, height) {
+            const windRad = (windData.direction * Math.PI) / 180;
+            const speed = windData.speed * 0.3;
+            
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+            ctx.lineWidth = 2;
+            ctx.lineCap = 'round';
+            ctx.shadowColor = 'rgba(255, 255, 255, 0.3)';
+            ctx.shadowBlur = 4;
+            
+            windParticles.forEach(p => {
+                // Двигаем частицу
+                p.x += Math.cos(windRad) * speed;
+                p.y += Math.sin(windRad) * speed;
+                p.age++;
+                
+                // Если частица вышла за границы - перезапускаем
+                if (p.x < -50) p.x = width + 50;
+                if (p.x > width + 50) p.x = -50;
+                if (p.y < -50) p.y = height + 50;
+                if (p.y > height + 50) p.y = -50;
+                
+                // Рисуем линию
+                const endX = p.x + Math.cos(windRad) * p.length;
+                const endY = p.y + Math.sin(windRad) * p.length;
+                
+                ctx.globalAlpha = 0.3 + 0.5 * Math.sin(p.age * 0.05);
+                ctx.beginPath();
+                ctx.moveTo(p.x, p.y);
+                ctx.lineTo(endX, endY);
+                ctx.stroke();
+            });
+            
+            ctx.globalAlpha = 1;
+            ctx.shadowBlur = 0;
+            
+            // Обновляем дисплей
+            document.getElementById('windSpeedDisplay').textContent = windData.speed.toFixed(1) + ' м/с';
+            document.getElementById('windDirDisplay').textContent = windData.direction.toFixed(0) + '°';
+        }
+        
+        function renderPrecip(ctx, width, height) {
+            ctx.strokeStyle = 'rgba(102, 126, 234, 0.7)';
+            ctx.lineWidth = 1.5;
+            ctx.lineCap = 'round';
+            
+            rainDrops.forEach(drop => {
+                // Двигаем каплю вниз
+                drop.y -= drop.speed * 2;
+                
+                // Если капля достигла низа - перезапускаем сверху
+                if (drop.y < -20) {
+                    drop.y = height + 20;
+                    drop.x = Math.random() * width;
+                }
+                
+                // Рисуем каплю (линия под углом)
+                const endX = drop.x - 2;
+                const endY = drop.y - 15;
+                
+                ctx.beginPath();
+                ctx.moveTo(drop.x, drop.y);
+                ctx.lineTo(endX, endY);
+                ctx.stroke();
+            });
+            
+            // Обновляем дисплей
+            document.getElementById('precipIntensityDisplay').textContent = precipData.intensity.toFixed(1) + ' мм/ч';
+        }
+
+        // ========== Анимация ветра ==========
+        function toggleWindAnimation() {
+            showWind = !showWind;
+            document.getElementById('btnWindAnim').classList.toggle('active', showWind);
+            
+            if (showWind) {
+                initWindParticles();
+                logEvent('Анимация ветра включена');
+            } else {
+                logEvent('Анимация ветра выключена');
+            }
+        }
+
+        function initWindParticles() {
+            windParticles = [];
+            const mapSize = map.getSize();
+            const width = mapSize[0];
+            const height = mapSize[1];
+            const particleCount = 150;
+            
+            for (let i = 0; i < particleCount; i++) {
+                windParticles.push({
+                    x: Math.random() * width,
+                    y: Math.random() * height,
+                    age: Math.random() * 100,
+                    length: 15 + Math.random() * 25
+                });
+            }
+        }
+
+        function stopWindAnimation() {
+            showWind = false;
+            document.getElementById('btnWindAnim').classList.remove('active');
+            logEvent('Анимация ветра остановлена');
+        }
+
+        // ========== Анимация осадков ==========
+        function togglePrecipAnimation() {
+            showPrecip = !showPrecip;
+            document.getElementById('btnPrecipAnim').classList.toggle('active', showPrecip);
+            
+            if (showPrecip) {
+                initRainDrops();
+                logEvent('Анимация осадков включена');
+            } else {
+                logEvent('Анимация осадков выключена');
+            }
+        }
+
+        function initRainDrops() {
+            rainDrops = [];
+            const mapSize = map.getSize();
+            const width = mapSize[0];
+            const height = mapSize[1];
+            const dropCount = Math.floor(200 * (precipData.intensity / 10));
+            
+            for (let i = 0; i < dropCount; i++) {
+                rainDrops.push({
+                    x: Math.random() * width,
+                    y: Math.random() * height,
+                    speed: 5 + Math.random() * 5,
+                    size: 1 + Math.random() * 2
+                });
+            }
+        }
+
+        function stopPrecipAnimation() {
+            showPrecip = false;
+            document.getElementById('btnPrecipAnim').classList.remove('active');
+            logEvent('Анимация осадков остановлена');
+        }
+
+        // ========== Остановить все анимации ==========
+        function stopAllAnimations() {
+            showWind = false;
+            showPrecip = false;
+            document.getElementById('btnWindAnim').classList.remove('active');
+            document.getElementById('btnPrecipAnim').classList.remove('active');
+            
+            if (timeAnimationInterval) {
+                clearInterval(timeAnimationInterval);
+                timeAnimationInterval = null;
+                document.getElementById('btnTimeAnim').innerHTML = '<i class="fas fa-play"></i><span>Старт</span>';
+                document.getElementById('btnTimeAnim').classList.remove('active');
+            }
+            
+            logEvent('Все анимации остановлены');
+        }
+
+        // ========== Обновление данных ветра ==========
+        function updateWindData() {
+            windData.speed = parseFloat(document.getElementById('windSpeedControl').value);
+            windData.direction = parseFloat(document.getElementById('windDirControl').value);
+            
+            document.getElementById('windSpeedValue').textContent = windData.speed.toFixed(0);
+            document.getElementById('windDirValue').textContent = windData.direction.toFixed(0);
+            
+            // Перезапускаем частицы при изменении направления
+            if (showWind) {
+                initWindParticles();
+            }
+        }
+
+        // ========== Обновление данных осадков ==========
+        function updatePrecipData() {
+            precipData.intensity = parseFloat(document.getElementById('precipIntensityControl').value);
+            document.getElementById('precipIntensityValue').textContent = precipData.intensity.toFixed(1);
+            
+            // Пересоздаём капли при изменении интенсивности
+            if (showPrecip) {
+                initRainDrops();
+            }
+        }
+
+        // ========== Swipe (сравнение слоёв) ==========
+        function toggleSwipeMode() {
+            swipeEnabled = !swipeEnabled;
+            document.getElementById('btnSwipe').classList.toggle('active', swipeEnabled);
+            
+            if (swipeEnabled) {
+                layers.satelliteCompare.setVisible(true);
+                updateSwipe(document.getElementById('swipeSlider').value);
+                logEvent('Режим сравнения включён');
+            } else {
+                layers.satelliteCompare.setVisible(false);
+                logEvent('Режим сравнения выключен');
+            }
+        }
+
+        function updateSwipe(value) {
+            document.getElementById('swipeValue').textContent = value + '%';
+            
+            if (!swipeEnabled) return;
+            
+            const view = map.getView();
+            const resolution = view.getResolution();
+            const width = resolution * value;
+            const extent = map.getView().calculateExtent(map.getSize());
+            
+            layers.satelliteCompare.setExtent([
+                extent[0],
+                extent[1],
+                extent[0] + width,
+                extent[3]
+            ]);
+        }
+
+        // ========== Экспорт карты ==========
+        function exportMapImage() {
+            const btn = event.target.closest('button');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i><span>Обработка...</span>';
+            
+            map.once('postcompose', (e) => {
+                const canvas = e.context.canvas;
+                canvas.toBlob((blob) => {
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'map-export-' + new Date().toISOString().slice(0, 19).replace(/:/g, '-') + '.png';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    
+                    btn.disabled = false;
+                    btn.innerHTML = '<i class="fas fa-image"></i><span>Экспорт карты (PNG)</span>';
+                    logEvent('Экспорт карты выполнен');
+                }, 'image/png');
+            });
+            
+            map.renderSync();
+        }
+
+        // ========== PDF Export Module ==========
+        const PdfExportModule = {
+            fonts: {
+                Roboto: {
+                    normal: 'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/fonts/Roboto/Roboto-Regular.ttf',
+                    bold: 'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/fonts/Roboto/Roboto-Medium.ttf',
+                    italics: 'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/fonts/Roboto/Roboto-Italic.ttf',
+                    bolditalics: 'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/fonts/Roboto/Roboto-MediumItalic.ttf'
+                }
+            },
+
+            async generatePDFReport() {
+                showToast('Генерация PDF отчёта...', 'info');
+                
+                // Показываем секцию с графиками для рендеринга
+                const chartsSection = document.getElementById('chartsSection');
+                chartsSection.style.display = 'block';
+
+                // Генерируем тестовые данные
+                const weatherData = this.generateWeatherData();
+                
+                // Рендерим графики
+                await this.renderCharts(weatherData);
+                
+                // Ждём рендеринга графиков
+                await new Promise(resolve => setTimeout(resolve, 1000));
+
+                // Экспортируем карту
+                const mapImage = await this.captureMap();
+                
+                // Экспортируем графики
+                const timeSeriesImage = await this.captureChart('timeSeriesChart');
+                const windRoseImage = await this.captureChart('windRoseChart');
+                const turbulenceImage = await this.captureChart('turbulenceChart');
+
+                // Скрываем секцию с графиками
+                chartsSection.style.display = 'none';
+
+                // Генерируем PDF
+                const docDefinition = {
+                    pageSize: 'A4',
+                    pageMargins: [30, 40, 30, 40],
+                    content: [
+                        // Заголовок
+                        {
+                            stack: [
+                                { text: 'MIRA - Метео-отчёт', style: 'mainTitle', margin: [0, 0, 0, 5] },
+                                { text: 'Отчёт о метеоусловиях и анализе рисков', style: 'subtitle', margin: [0, 0, 0, 15] },
+                                { text: `Дата: ${new Date().toLocaleString('ru-RU')}`, style: 'meta' },
+                                { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 2, lineColor: '#667eea' }], margin: [0, 15, 0, 15] }
+                            ],
+                            margin: [0, 0, 0, 20]
+                        },
+
+                        // Карта
+                        ...(mapImage ? [{
+                            stack: [
+                                { text: 'Карта маршрута', style: 'sectionTitle', margin: [0, 10, 0, 10] },
+                                { image: `data:image/png;base64,${mapImage}`, width: 480, alignment: 'center' }
+                            ],
+                            margin: [0, 0, 0, 20]
+                        }] : []),
+
+                        // Временной ряд
+                        ...(timeSeriesImage ? [{
+                            stack: [
+                                { text: 'Временной ряд метеопараметров', style: 'sectionTitle', margin: [0, 10, 0, 10] },
+                                { image: `data:image/png;base64,${timeSeriesImage}`, width: 450, alignment: 'center' }
+                            ],
+                            margin: [0, 0, 0, 20]
+                        }] : []),
+
+                        // Роза ветров
+                        ...(windRoseImage ? [{
+                            stack: [
+                                { text: 'Роза ветров', style: 'sectionTitle', margin: [0, 10, 0, 10] },
+                                { image: `data:image/png;base64,${windRoseImage}`, width: 400, alignment: 'center' }
+                            ],
+                            margin: [0, 0, 0, 20]
+                        }] : []),
+
+                        // Турбулентность
+                        ...(turbulenceImage ? [{
+                            stack: [
+                                { text: 'Индекс турбулентности', style: 'sectionTitle', margin: [0, 10, 0, 10] },
+                                { image: `data:image/png;base64,${turbulenceImage}`, width: 450, alignment: 'center' }
+                            ],
+                            margin: [0, 0, 0, 20]
+                        }] : []),
+
+                        // Таблица данных
+                        {
+                            stack: [
+                                { text: 'Метеопараметры', style: 'sectionTitle', margin: [0, 10, 0, 10] },
+                                {
+                                    table: {
+                                        widths: ['*', '*', '*', '*'],
+                                        body: [
+                                            [
+                                                { text: 'Параметр', style: 'tableHeader' },
+                                                { text: 'Мин', style: 'tableHeader' },
+                                                { text: 'Макс', style: 'tableHeader' },
+                                                { text: 'Среднее', style: 'tableHeader' }
+                                            ],
+                                            [
+                                                { text: 'Температура (°C)' },
+                                                { text: weatherData.temp.min.toFixed(1) },
+                                                { text: weatherData.temp.max.toFixed(1) },
+                                                { text: weatherData.temp.avg.toFixed(1) }
+                                            ],
+                                            [
+                                                { text: 'Ветер (м/с)' },
+                                                { text: weatherData.wind.min.toFixed(1) },
+                                                { text: weatherData.wind.max.toFixed(1) },
+                                                { text: weatherData.wind.avg.toFixed(1) }
+                                            ],
+                                            [
+                                                { text: 'Осадки (мм/ч)' },
+                                                { text: weatherData.precip.min.toFixed(1) },
+                                                { text: weatherData.precip.max.toFixed(1) },
+                                                { text: weatherData.precip.avg.toFixed(1) }
+                                            ]
+                                        ]
+                                    },
+                                    layout: 'lightHorizontalLines'
+                                }
+                            ],
+                            margin: [0, 0, 0, 20]
+                        },
+
+                        // Рекомендации
+                        {
+                            stack: [
+                                { text: 'Рекомендации', style: 'sectionTitle', margin: [0, 10, 0, 10] },
+                                {
+                                    ul: [
+                                        { text: 'Ветер в пределах допустимых значений для БВС', color: '#38a169', margin: [0, 3, 0, 3] },
+                                        { text: 'Осадки отсутствуют в ближайшие 12 часов', color: '#38a169', margin: [0, 3, 0, 3] },
+                                        { text: 'Видимость более 5 км - условия благоприятные', color: '#38a169', margin: [0, 3, 0, 3] },
+                                        { text: 'Турбулентность низкая до 14:00', color: '#ed8936', margin: [0, 3, 0, 3] }
+                                    ],
+                                    margin: [10, 0, 0, 0]
+                                }
+                            ]
+                        }
+                    ],
+                    styles: {
+                        mainTitle: { fontSize: 24, bold: true, color: '#2d3748' },
+                        subtitle: { fontSize: 12, color: '#718096' },
+                        meta: { fontSize: 9, color: '#4a5568' },
+                        sectionTitle: { fontSize: 14, bold: true, color: '#2d3748', margin: [0, 10, 0, 5] },
+                        tableHeader: { fontSize: 10, bold: true, color: '#4a5568', alignment: 'center' }
+                    }
+                };
+
+                pdfMake.fonts = this.fonts;
+                pdfMake.createPdf(docDefinition).download(`MIRA_Report_${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.pdf`);
+                
+                showToast('PDF отчёт сгенерирован!', 'success');
+                logEvent('PDF отчёт с графиками сгенерирован');
+            },
+
+            generateWeatherData() {
+                const hours = 24;
+                const now = new Date();
+                
+                return {
+                    times: Array.from({ length: hours }, (_, i) => {
+                        const d = new Date(now.getTime() + i * 3600000);
+                        return d.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+                    }),
+                    temp: Array.from({ length: hours }, (_, i) => 15 + Math.sin(i / 4) * 10 + Math.random() * 2),
+                    wind: Array.from({ length: hours }, (_, i) => 5 + Math.random() * 15),
+                    windDir: Array.from({ length: hours }, (_, i) => Math.random() * 360),
+                    precip: Array.from({ length: hours }, (_, i) => Math.random() > 0.7 ? Math.random() * 5 : 0),
+                    temp: {
+                        min: 10,
+                        max: 25,
+                        avg: 17.5
+                    },
+                    wind: {
+                        min: 3,
+                        max: 18,
+                        avg: 8.5
+                    },
+                    precip: {
+                        min: 0,
+                        max: 4.5,
+                        avg: 1.2
+                    }
+                };
+            },
+
+            async renderCharts(data) {
+                // Временной ряд
+                const timeSeriesTrace = {
+                    x: data.times,
+                    y: data.temp,
+                    name: 'Температура',
+                    type: 'scatter',
+                    mode: 'lines+markers',
+                    line: { color: '#e53e3e', width: 2 },
+                    yaxis: 'y1'
+                };
+
+                const windTrace = {
+                    x: data.times,
+                    y: data.wind,
+                    name: 'Ветер',
+                    type: 'scatter',
+                    mode: 'lines+markers',
+                    line: { color: '#3182ce', width: 2 },
+                    yaxis: 'y2'
+                };
+
+                const precipTrace = {
+                    x: data.times,
+                    y: data.precip,
+                    name: 'Осадки',
+                    type: 'bar',
+                    marker: { color: '#4299e1', opacity: 0.7 }
+                };
+
+                Plotly.newPlot('timeSeriesChart', [timeSeriesTrace, windTrace, precipTrace], {
+                    title: 'Метеопараметры (24ч)',
+                    yaxis: { title: '°C', titlefont: { color: '#e53e3e' } },
+                    yaxis2: { title: 'м/с, мм', overlaying: 'y', side: 'right', titlefont: { color: '#3182ce' } },
+                    xaxis: { title: 'Время' },
+                    margin: { t: 40, l: 50, r: 50, b: 40 },
+                    showlegend: true,
+                    legend: { x: 0, y: 1 }
+                }, { responsive: true, displayModeBar: false });
+
+                // Роза ветров
+                const directions = ['С', 'СВ', 'В', 'ЮВ', 'Ю', 'ЮЗ', 'З', 'СЗ'];
+                const angles = [0, 45, 90, 135, 180, 225, 270, 315];
+                const windData = Array.from({ length: 8 }, () => Math.random() * 15);
+
+                const windRoseTrace = {
+                    theta: angles,
+                    r: windData,
+                    type: 'barpolar',
+                    marker: {
+                        color: windData.map(v => v > 10 ? '#e53e3e' : v > 5 ? '#ed8936' : '#38a169'),
+                        line: { color: '#fff', width: 1 }
+                    }
+                };
+
+                Plotly.newPlot('windRoseChart', [windRoseTrace], {
+                    title: 'Роза ветров',
+                    polar: {
+                        radialaxis: { visible: true, range: [0, 20] },
+                        angularaxis: { direction: 'clockwise', period: 8, tickvals: angles, ticktext: directions }
+                    },
+                    margin: { t: 40, l: 20, r: 20, b: 20 }
+                }, { responsive: true, displayModeBar: false });
+
+                // Турбулентность
+                const turbulence = data.wind.map((w, i) => Math.min(100, (Math.random() * 50 + 20)));
+                const turbTrace = {
+                    x: data.times,
+                    y: turbulence,
+                    name: 'Турбулентность',
+                    type: 'scatter',
+                    mode: 'lines+markers',
+                    line: { color: '#ed8936', width: 2 },
+                    fill: 'tozero',
+                    fillcolor: 'rgba(237, 137, 54, 0.1)'
+                };
+
+                Plotly.newPlot('turbulenceChart', [turbTrace], {
+                    title: 'Индекс турбулентности',
+                    yaxis: { title: '%', range: [0, 100] },
+                    xaxis: { title: 'Время' },
+                    margin: { t: 40, l: 50, r: 20, b: 40 },
+                    shapes: [{
+                        type: 'line',
+                        y0: 50, y1: 50, x0: 0, x1: 1,
+                        xref: 'paper',
+                        line: { color: '#ed8936', width: 1, dash: 'dash' }
+                    }]
+                }, { responsive: true, displayModeBar: false });
+            },
+
+            async captureMap() {
+                try {
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    const canvas = document.querySelector('#map canvas');
+                    if (!canvas) return null;
+                    return canvas.toDataURL('image/png').split(',')[1];
+                } catch (e) {
+                    console.warn('Ошибка экспорта карты:', e);
+                    return null;
+                }
+            },
+
+            async captureChart(containerId) {
+                try {
+                    const element = document.getElementById(containerId);
+                    if (!element) return null;
+                    
+                    const canvas = await html2canvas(element, {
+                        scale: 2,
+                        useCORS: true,
+                        backgroundColor: '#ffffff'
+                    });
+                    return canvas.toDataURL('image/png').split(',')[1];
+                } catch (e) {
+                    console.warn(`Ошибка экспорта графика ${containerId}:`, e);
+                    return null;
+                }
+            }
+        };
+
+        // Глобальная функция для кнопки
+        function generatePDFReport() {
+            PdfExportModule.generatePDFReport();
+        }
+
+        // ========== Инициализация ==========
+        document.addEventListener('DOMContentLoaded', initMap);
+    </script>
+</body>
+</html>

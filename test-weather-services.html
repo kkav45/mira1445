@@ -1,0 +1,1411 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MIRA — Тест: Сравнение метеосервисов</title>
+
+    <!-- OpenLayers -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v9.2.4/ol.css">
+    <script src="https://cdn.jsdelivr.net/npm/ol@v9.2.4/dist/ol.js"></script>
+
+    <!-- Plotly.js -->
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f0f1a;
+        }
+
+        .container {
+            display: flex;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Левая панель - карта */
+        .map-panel {
+            flex: 1;
+            position: relative;
+            min-width: 400px;
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Правая панель - результаты */
+        .results-panel {
+            width: 45%;
+            min-width: 500px;
+            background: rgba(255, 255, 255, 0.98);
+            box-shadow: -5px 0 30px rgba(0, 0, 0, 0.2);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .panel-header {
+            padding: 20px 24px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .panel-title {
+            font-size: 18px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .panel-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 10px 18px;
+            border-radius: 8px;
+            border: none;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: rgba(255, 255, 255, 0.2);
+            color: #fff;
+            backdrop-filter: blur(10px);
+        }
+
+        .btn-primary:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .btn-success {
+            background: #38a169;
+            color: #fff;
+        }
+
+        .btn-success:hover {
+            background: #2f855a;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Контент панели */
+        .panel-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px 24px;
+        }
+
+        .panel-content::-webkit-scrollbar { width: 6px; }
+        .panel-content::-webkit-scrollbar-thumb { background: rgba(102, 126, 234, 0.3); border-radius: 3px; }
+
+        /* Настройки */
+        .settings-block {
+            background: rgba(102, 126, 234, 0.05);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 20px;
+            border: 1px solid rgba(102, 126, 234, 0.2);
+        }
+
+        .settings-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .settings-title i {
+            color: #667eea;
+        }
+
+        .coord-row {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 12px;
+        }
+
+        .coord-input {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid rgba(0, 0, 0, 0.15);
+            border-radius: 8px;
+            padding: 10px 12px;
+            color: #2d3748;
+            font-size: 13px;
+            font-family: 'SF Mono', Monaco, monospace;
+        }
+
+        .coord-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .service-checkbox {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 0;
+            font-size: 13px;
+        }
+
+        .service-checkbox input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .service-checkbox label {
+            cursor: pointer;
+            flex: 1;
+        }
+
+        .service-badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 600;
+            margin-left: 8px;
+        }
+
+        .badge-primary { background: #667eea; color: #fff; }
+        .badge-success { background: #38a169; color: #fff; }
+        .badge-warning { background: #ed8936; color: #fff; }
+
+        /* Статус загрузки */
+        .loading-block {
+            background: rgba(0, 0, 0, 0.02);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid rgba(102, 126, 234, 0.2);
+            border-top-color: #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            color: #4a5568;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .loading-progress {
+            margin-top: 15px;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s;
+        }
+
+        /* Карточка сервиса */
+        .service-card {
+            background: #fff;
+            border-radius: 12px;
+            border: 2px solid rgba(0, 0, 0, 0.08);
+            margin-bottom: 16px;
+            overflow: hidden;
+            transition: all 0.3s;
+        }
+
+        .service-card:hover {
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            transform: translateY(-2px);
+        }
+
+        .service-card.success { border-color: #38a169; }
+        .service-card.error { border-color: #e53e3e; }
+        .service-card.loading { border-color: #ed8936; }
+
+        .service-header {
+            padding: 14px 18px;
+            background: rgba(102, 126, 234, 0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .service-name {
+            font-size: 14px;
+            font-weight: 700;
+            color: #2d3748;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .service-status {
+            font-size: 11px;
+            font-weight: 600;
+            padding: 4px 10px;
+            border-radius: 4px;
+        }
+
+        .status-success { background: #38a169; color: #fff; }
+        .status-error { background: #e53e3e; color: #fff; }
+        .status-loading { background: #ed8936; color: #fff; }
+        .status-pending { background: #a0aec0; color: #fff; }
+
+        .service-body {
+            padding: 16px 18px;
+        }
+
+        .params-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+
+        .param-item {
+            text-align: center;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.03);
+            border-radius: 8px;
+        }
+
+        .param-value {
+            font-size: 18px;
+            font-weight: 700;
+            color: #2d3748;
+            display: block;
+        }
+
+        .param-label {
+            font-size: 9px;
+            color: rgba(0, 0, 0, 0.5);
+            text-transform: uppercase;
+            margin-top: 4px;
+            display: block;
+        }
+
+        .service-error {
+            color: #e53e3e;
+            font-size: 12px;
+            padding: 10px;
+            background: rgba(229, 62, 62, 0.05);
+            border-radius: 6px;
+            margin-top: 10px;
+        }
+
+        .service-time {
+            font-size: 10px;
+            color: rgba(0, 0, 0, 0.4);
+            margin-top: 8px;
+            text-align: right;
+        }
+
+        /* Сравнительная таблица */
+        .comparison-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+            margin-top: 20px;
+        }
+
+        .comparison-table th,
+        .comparison-table td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+        }
+
+        .comparison-table th {
+            background: rgba(102, 126, 234, 0.1);
+            color: #2d3748;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 10px;
+        }
+
+        .comparison-table tr:hover td {
+            background: rgba(102, 126, 234, 0.05);
+        }
+
+        /* Графики */
+        .chart-section {
+            margin-top: 20px;
+        }
+
+        .chart-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .chart-container {
+            width: 100%;
+            height: 250px;
+            border-radius: 12px;
+            background: rgba(0, 0, 0, 0.02);
+            overflow: hidden;
+        }
+
+        /* Toast уведомления */
+        .toast {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-100px);
+            background: rgba(255, 255, 255, 0.98);
+            backdrop-filter: blur(10px);
+            padding: 14px 28px;
+            border-radius: 12px;
+            color: #2d3748;
+            font-size: 14px;
+            z-index: 3000;
+            opacity: 0;
+            transition: all 0.4s;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.2);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-weight: 500;
+        }
+
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+
+        .toast.success i { color: #38a169; }
+        .toast.error i { color: #e53e3e; }
+        .toast.info i { color: #3182ce; }
+
+        /* Кнопка геолокации на карте */
+        .geo-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 48px;
+            height: 48px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: none;
+            border-radius: 14px;
+            color: #2d3748;
+            font-size: 18px;
+            cursor: pointer;
+            z-index: 1000;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .geo-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 6px 25px rgba(0, 0, 0, 0.2);
+        }
+
+        .geo-btn:active {
+            transform: scale(0.95);
+        }
+
+        .geo-btn i {
+            color: #667eea;
+        }
+
+        /* Маркер на карте */
+        .map-marker {
+            width: 20px;
+            height: 20px;
+            background: #667eea;
+            border: 3px solid #fff;
+            border-radius: 50%;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Адаптив */
+        @media (max-width: 1200px) {
+            .results-panel {
+                width: 50%;
+                min-width: 400px;
+            }
+        }
+
+        @media (max-width: 992px) {
+            .container {
+                flex-direction: column;
+            }
+            .map-panel {
+                height: 50vh;
+                min-width: 0;
+            }
+            .results-panel {
+                width: 100%;
+                min-width: 0;
+                height: 50vh;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Левая панель - карта -->
+        <div class="map-panel">
+            <div id="map"></div>
+            
+            <!-- Кнопка геолокации -->
+            <button class="geo-btn" onclick="getCurrentLocation()" title="Моё местоположение">
+                <i class="fas fa-location-crosshairs"></i>
+            </button>
+        </div>
+
+        <!-- Правая панель - результаты -->
+        <div class="results-panel">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <i class="fas fa-chart-bar"></i>
+                    <span>Сравнение метеосервисов</span>
+                </div>
+                <div class="panel-actions">
+                    <button class="btn btn-primary" onclick="clearResults()">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                    <button class="btn btn-success" onclick="fetchAllServices()" id="fetchBtn">
+                        <i class="fas fa-play"></i>
+                        <span>Тест</span>
+                    </button>
+                </div>
+            </div>
+
+            <div class="panel-content">
+                <!-- Информация -->
+                <div class="settings-block" style="background:rgba(56,161,105,0.1);border-color:rgba(56,161,105,0.3);">
+                    <div class="settings-title" style="color:#276749;">
+                        <i class="fas fa-info-circle"></i>
+                        <span>О тесте</span>
+                    </div>
+                    <p style="font-size:12px;color:#4a5568;line-height:1.6;margin:0;">
+                        Эта страница сравнивает точность и скорость работы различных метеосервисов. 
+                        Все запросы выполняются параллельно для объективного сравнения.
+                        <br><br>
+                        <strong>Сервисы:</strong>
+                        <br>• <strong>Open-Meteo</strong> — основной сервис (лучший для авиации)
+                        <br>• <strong>MET Norway</strong> — европейский резерв (надёжный, HTTPS)
+                        <br>• <strong>7Timer!</strong> — через CORS прокси (может быть нестабилен)
+                    </p>
+                </div>
+
+                <!-- Настройки -->
+                <div class="settings-block">
+                    <div class="settings-title">
+                        <i class="fas fa-cog"></i>
+                        <span>Параметры теста</span>
+                    </div>
+
+                    <div class="coord-row">
+                        <input type="text" class="coord-input" id="latInput" placeholder="Широта" value="55.7558">
+                        <input type="text" class="coord-input" id="lonInput" placeholder="Долгота" value="37.6173">
+                    </div>
+
+                    <div class="service-checkbox">
+                        <input type="checkbox" id="chkOpenMeteo" checked>
+                        <label for="chkOpenMeteo">
+                            Open-Meteo (основной)
+                            <span class="service-badge badge-primary">10K/день</span>
+                        </label>
+                    </div>
+
+                    <div class="service-checkbox">
+                        <input type="checkbox" id="chkMetNo" checked>
+                        <label for="chkMetNo">
+                            MET Norway (резерв)
+                            <span class="service-badge badge-success">~1K/час</span>
+                        </label>
+                    </div>
+
+                    <div class="service-checkbox">
+                        <input type="checkbox" id="chk7Timer">
+                        <label for="chk7Timer">
+                            7Timer! (через CORS прокси) ⚠️ Нестабилен
+                            <span class="service-badge badge-warning">~100/час</span>
+                        </label>
+                    </div>
+
+                    <div class="service-checkbox" style="margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(0,0,0,0.1);">
+                        <input type="checkbox" id="chkHybrid" checked>
+                        <label for="chkHybrid" style="font-weight: 600; color: #276749;">
+                            🎯 ГИБРИДНЫЙ режим (Open-Meteo + MET Norway)
+                            <span class="service-badge badge-success">Рекомендуется</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Блок загрузки -->
+                <div class="loading-block" id="loadingBlock" style="display: none;">
+                    <div class="spinner"></div>
+                    <div class="loading-text">Получение данных из сервисов...</div>
+                    <div class="loading-progress">
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progressFill" style="width: 0%;"></div>
+                        </div>
+                        <div id="progressText" style="font-size: 11px; color: rgba(0,0,0,0.5); margin-top: 6px;">0%</div>
+                    </div>
+                </div>
+
+                <!-- Результаты -->
+                <div id="resultsContainer"></div>
+
+                <!-- Сравнительная таблица -->
+                <div id="comparisonSection" style="display: none;">
+                    <div class="chart-title">
+                        <i class="fas fa-table"></i>
+                        <span>Сравнительная таблица</span>
+                    </div>
+                    <table class="comparison-table">
+                        <thead>
+                            <tr>
+                                <th>Сервис</th>
+                                <th>Темп. (°C)</th>
+                                <th>Ветер (м/с)</th>
+                                <th>Влажность (%)</th>
+                                <th>Время (мс)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="comparisonTableBody"></tbody>
+                    </table>
+                </div>
+
+                <!-- Графики -->
+                <div id="chartsSection" class="chart-section" style="display: none;">
+                    <div class="chart-title">
+                        <i class="fas fa-chart-line"></i>
+                        <span>Сравнение параметров</span>
+                    </div>
+                    <div class="chart-container" id="comparisonChart"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast уведомления -->
+    <div class="toast" id="toast">
+        <i class="fas fa-info-circle"></i>
+        <span id="toastMessage"></span>
+    </div>
+
+    <script>
+        // ==================== КОНФИГУРАЦИЯ ====================
+        const WEATHER_SERVICES = {
+            OPEN_METEO: 'open-meteo',
+            MET_NO: 'met-no',
+            SEVENTIMER: '7timer',
+            HYBRID: 'hybrid'
+        };
+
+        const SERVICE_INFO = {
+            [WEATHER_SERVICES.OPEN_METEO]: {
+                name: 'Open-Meteo',
+                badge: '10K/день',
+                badgeClass: 'badge-primary',
+                icon: 'fa-cloud-sun',
+                cors: true,
+                description: 'Основной (есть данные на высотаах)'
+            },
+            [WEATHER_SERVICES.MET_NO]: {
+                name: 'MET Norway',
+                badge: '~1K/час',
+                badgeClass: 'badge-success',
+                icon: 'fa-cloud',
+                cors: true,
+                description: 'Резерв (точнее для Европы)'
+            },
+            [WEATHER_SERVICES.SEVENTIMER]: {
+                name: '7Timer! (через прокси)',
+                badge: '~100/час',
+                badgeClass: 'badge-warning',
+                icon: 'fa-plane',
+                cors: false,
+                description: 'Авиация (турбулентность, обледенение)'
+            },
+            [WEATHER_SERVICES.HYBRID]: {
+                name: '🎯 ГИБРИДНЫЙ',
+                badge: 'Комби',
+                badgeClass: 'badge-success',
+                icon: 'fa-layer-group',
+                cors: true,
+                description: 'Open-Meteo + MET Norway (лучшее из обоих)'
+            }
+        };
+
+        let map;
+        let marker;
+        let results = {};
+        let startTime;
+
+        // ==================== ИНИЦИАЛИЗАЦИЯ КАРТЫ ====================
+        function initMap() {
+            const center = ol.proj.fromLonLat([37.6173, 55.7558]); // Москва
+
+            map = new ol.Map({
+                target: 'map',
+                layers: [
+                    new ol.layer.Tile({
+                        source: new ol.source.OSM()
+                    })
+                ],
+                view: new ol.View({
+                    center: center,
+                    zoom: 10
+                })
+            });
+
+            // Маркер
+            marker = new ol.Feature({
+                geometry: new ol.geom.Point(center)
+            });
+
+            marker.setStyle(new ol.style.Style({
+                image: new ol.style.Circle({
+                    radius: 10,
+                    fill: new ol.style.Fill({ color: '#667eea' }),
+                    stroke: new ol.style.Stroke({ color: '#fff', width: 3 })
+                })
+            }));
+
+            const markerLayer = new ol.layer.Vector({
+                source: new ol.source.Vector({
+                    features: [marker]
+                })
+            });
+
+            map.addLayer(markerLayer);
+
+            // Клик по карте
+            map.on('click', function(evt) {
+                const coords = ol.proj.toLonLat(evt.coordinate);
+                updateCoordinates(coords[1], coords[0]); // lat, lon
+            });
+
+            showToast('Карта инициализирована. Кликните для выбора координат', 'success');
+        }
+
+        // ==================== КООРДИНАТЫ ====================
+        function updateCoordinates(lat, lon) {
+            document.getElementById('latInput').value = lat.toFixed(4);
+            document.getElementById('lonInput').value = lon.toFixed(4);
+
+            const projCoords = ol.proj.fromLonLat([lon, lat]);
+            marker.setGeometry(new ol.geom.Point(projCoords));
+            map.getView().animate({
+                center: projCoords,
+                duration: 500
+            });
+        }
+
+        function getCurrentLocation() {
+            if (!navigator.geolocation) {
+                showToast('Геолокация не поддерживается', 'error');
+                return;
+            }
+
+            showToast('📍 Определение местоположения...', 'info');
+
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const lat = position.coords.latitude;
+                    const lon = position.coords.longitude;
+                    updateCoordinates(lat, lon);
+                    showToast(`📍 Местоположение: ${lat.toFixed(4)}, ${lon.toFixed(4)}`, 'success');
+                },
+                (error) => {
+                    showToast('❌ Ошибка геолокации: ' + error.message, 'error');
+                },
+                { enableHighAccuracy: true, timeout: 10000 }
+            );
+        }
+
+        // ==================== ПОЛУЧЕНИЕ ДАННЫХ ====================
+
+        // ГИБРИДНЫЙ режим: объединяем данные от Open-Meteo и MET Norway
+        function calculateHybridWeather(openMeteo, metNo) {
+            console.log('🎯 Расчёт гибридных данных...');
+            console.log('Open-Meteo:', openMeteo);
+            console.log('MET Norway:', metNo);
+
+            const hybrid = {
+                current: {},
+                hourly: []
+            };
+
+            // === Базовые данные из Open-Meteo (есть высоты) ===
+            if (openMeteo?.current) {
+                hybrid.current.temperature_2m = openMeteo.current.temperature_2m;
+                hybrid.current.wind_speed_10m = openMeteo.current.wind_speed_10m;
+                hybrid.current.wind_direction_10m = openMeteo.current.wind_direction_10m;
+                hybrid.current.relative_humidity_2m = openMeteo.current.relative_humidity_2m;
+                hybrid.current.pressure_msl = openMeteo.current.pressure_msl;
+
+                // Данные на высотах (ТОЛЬКО Open-Meteo)
+                hybrid.hourly.wind_speed_80m = openMeteo.hourly?.wind_speed_80m?.[0];
+                hybrid.hourly.wind_speed_100m = openMeteo.hourly?.wind_speed_100m?.[0];
+                hybrid.hourly.temperature_80m = openMeteo.hourly?.temperature_80m?.[0];
+                hybrid.hourly.temperature_100m = openMeteo.hourly?.temperature_100m?.[0];
+            }
+
+            // === Коррекция по MET Norway (точнее для Европы) ===
+            if (metNo?.properties?.timeseries?.length > 0) {
+                const met = metNo.properties.timeseries[0].data.instant.details;
+
+                // Корректируем видимость и осадки (MET Norway точнее)
+                if (met.visibility !== undefined) {
+                    hybrid.current.visibility = met.visibility;
+                }
+                if (met.precipitation_amount !== undefined) {
+                    hybrid.current.precipitation = met.precipitation_amount;
+                }
+
+                // Корректируем облачность (MET Norway точнее)
+                if (met.cloud_area_fraction !== undefined) {
+                    hybrid.current.cloud_cover = met.cloud_area_fraction;
+                }
+
+                // Если Open-Meteo не отдал данные, используем MET Norway
+                if (hybrid.current.temperature_2m === undefined && met.air_temperature !== undefined) {
+                    hybrid.current.temperature_2m = met.air_temperature;
+                }
+                if (hybrid.current.relative_humidity_2m === undefined && met.relative_humidity_2m !== undefined) {
+                    hybrid.current.relative_humidity_2m = met.relative_humidity_2m;
+                }
+                if (hybrid.current.wind_speed_10m === undefined && met.wind_speed_10m !== undefined) {
+                    hybrid.current.wind_speed_10m = met.wind_speed_10m;
+                }
+            }
+
+            // Если Open-Meteo не отдал cloud_cover, но есть precipitation
+            if (hybrid.current.cloud_cover === undefined && openMeteo?.current?.cloud_cover !== undefined) {
+                hybrid.current.cloud_cover = openMeteo.current.cloud_cover;
+            }
+
+            console.log('🎯 Гибридные данные:', hybrid);
+            return hybrid;
+        }
+
+        async function fetchAllServices() {
+            const lat = parseFloat(document.getElementById('latInput').value);
+            const lon = parseFloat(document.getElementById('lonInput').value);
+
+            if (isNaN(lat) || isNaN(lon)) {
+                showToast('❌ Введите корректные координаты', 'error');
+                return;
+            }
+
+            const enabledServices = [];
+            if (document.getElementById('chkOpenMeteo').checked) enabledServices.push(WEATHER_SERVICES.OPEN_METEO);
+            if (document.getElementById('chkMetNo').checked) enabledServices.push(WEATHER_SERVICES.MET_NO);
+            if (document.getElementById('chk7Timer').checked) enabledServices.push(WEATHER_SERVICES.SEVENTIMER);
+            if (document.getElementById('chkHybrid').checked) enabledServices.push(WEATHER_SERVICES.HYBRID);
+
+            if (enabledServices.length === 0) {
+                showToast('❌ Выберите хотя бы один сервис', 'error');
+                return;
+            }
+
+            // Сброс результатов
+            results = {};
+            document.getElementById('resultsContainer').innerHTML = '';
+            document.getElementById('comparisonSection').style.display = 'none';
+            document.getElementById('chartsSection').style.display = 'none';
+
+            // Показываем индикатор загрузки
+            document.getElementById('loadingBlock').style.display = 'block';
+            document.getElementById('fetchBtn').disabled = true;
+
+            startTime = Date.now();
+            let completed = 0;
+            const total = enabledServices.length;
+
+            // Запускаем все запросы параллельно
+            const promises = enabledServices.map(async (service) => {
+                const serviceStartTime = Date.now();
+
+                try {
+                    let data;
+
+                    console.log(`🔄 Запрос к ${service}...`);
+
+                    switch (service) {
+                        case WEATHER_SERVICES.OPEN_METEO:
+                            data = await fetchOpenMeteo(lat, lon);
+                            console.log(`✅ ${service}: данные получены`, data);
+                            break;
+                        case WEATHER_SERVICES.MET_NO:
+                            data = await fetchMetNo(lat, lon);
+                            console.log(`✅ ${service}: данные получены`, data);
+                            break;
+                        case WEATHER_SERVICES.SEVENTIMER:
+                            data = await fetch7Timer(lat, lon);
+                            console.log(`✅ ${service}: данные получены`, data);
+                            break;
+                        case WEATHER_SERVICES.HYBRID:
+                            // ГИБРИДНЫЙ: получаем данные из обоих сервисов
+                            const [openMeteoData, metNoData] = await Promise.all([
+                                fetchOpenMeteo(lat, lon).catch(e => { console.warn('Open-Meteo для гибрида:', e); return null; }),
+                                fetchMetNo(lat, lon).catch(e => { console.warn('MET Norway для гибрида:', e); return null; })
+                            ]);
+                            data = calculateHybridWeather(openMeteoData, metNoData);
+                            console.log(`✅ ${service}: гибридные данные рассчитаны`, data);
+                            break;
+                    }
+
+                    const responseTime = Date.now() - serviceStartTime;
+                    const normalizedData = normalizeWeatherData(data, service);
+
+                    console.log(`📊 ${service}: нормализованные данные`, normalizedData);
+
+                    // Проверяем, есть ли хоть какие-то данные
+                    const hasData = normalizedData.temp !== null ||
+                                   normalizedData.humidity !== null ||
+                                   normalizedData.windSpeed !== null;
+
+                    results[service] = {
+                        success: hasData,
+                        data: hasData ? normalizedData : null,
+                        error: hasData ? null : 'Нет данных от сервиса',
+                        responseTime: responseTime,
+                        timestamp: new Date().toISOString()
+                    };
+
+                    renderServiceCard(service, results[service]);
+                } catch (error) {
+                    console.error(`❌ ${service}: ошибка`, error);
+                    const responseTime = Date.now() - serviceStartTime;
+                    results[service] = {
+                        success: false,
+                        error: error.message,
+                        responseTime: responseTime
+                    };
+
+                    renderServiceCard(service, results[service]);
+                }
+
+                completed++;
+                updateProgress(completed, total);
+            });
+
+            await Promise.all(promises);
+
+            // Завершение
+            document.getElementById('loadingBlock').style.display = 'none';
+            document.getElementById('fetchBtn').disabled = false;
+
+            // Показываем сравнение
+            renderComparisonTable();
+            renderComparisonChart();
+
+            const successCount = Object.values(results).filter(r => r.success).length;
+            showToast(`✅ Тест завершён: ${successCount}/${total} сервисов успешно`, 'success');
+        }
+
+        function updateProgress(completed, total) {
+            const percent = Math.round((completed / total) * 100);
+            document.getElementById('progressFill').style.width = percent + '%';
+            document.getElementById('progressText').textContent = percent + '%';
+        }
+
+        // ==================== API ЗАПРОСЫ ====================
+        
+        // CORS прокси для сервисов без CORS поддержки
+        const CORS_PROXIES = [
+            'https://api.allorigins.win/raw?url=',
+            'https://corsproxy.io/?',
+            'https://thingproxy.freeboard.io/fetch/'
+        ];
+
+        async function fetchWithCORSProxy(url, fallback = false) {
+            // Пробуем прямой запрос сначала
+            try {
+                const response = await fetch(url);
+                if (response.ok) {
+                    // Проверяем, не пустой ли ответ
+                    const text = await response.text();
+                    if (text && text.trim().length > 0) {
+                        return new Response(text, {
+                            status: response.status,
+                            headers: response.headers
+                        });
+                    }
+                }
+            } catch (e) {
+                console.log('Прямой запрос не удался, используем CORS прокси');
+            }
+
+            // Пробуем CORS прокси
+            for (const proxy of CORS_PROXIES) {
+                try {
+                    const proxiedUrl = proxy + encodeURIComponent(url);
+                    const response = await fetch(proxiedUrl);
+                    if (response.ok) {
+                        const text = await response.text();
+                        if (text && text.trim().length > 0) {
+                            return new Response(text, {
+                                status: response.status,
+                                headers: response.headers
+                            });
+                        }
+                    }
+                } catch (e) {
+                    console.warn(`CORS прокси ${proxy} не удался`);
+                }
+            }
+
+            throw new Error('Все CORS прокси не доступны или возвращают пустой ответ');
+        }
+
+        async function fetchOpenMeteo(lat, lon) {
+            // Исправленные параметры для Open-Meteo API
+            const url = 'https://api.open-meteo.com/v1/forecast?' +
+                'latitude=' + lat + '&' +
+                'longitude=' + lon + '&' +
+                'current=temperature_2m,relative_humidity_2m,precipitation,cloud_cover,pressure_msl,wind_speed_10m,wind_direction_10m&' +
+                'hourly=temperature_2m,relative_humidity_2m,wind_speed_10m,wind_direction_10m&' +
+                'timezone=auto';
+
+            console.log('Open-Meteo URL:', url);
+            
+            const response = await fetch(url);
+            console.log('Open-Meteo response status:', response.status);
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('Open-Meteo error:', errorText);
+                throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 100)}`);
+            }
+            
+            try {
+                return await response.json();
+            } catch (error) {
+                throw new Error('Ошибка парсинга JSON от Open-Meteo');
+            }
+        }
+
+        async function fetchMetNo(lat, lon) {
+            const url = `https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=${lat}&lon=${lon}`;
+
+            console.log('MET Norway URL:', url);
+
+            // ✅ User-Agent с реальным email для MET Norway
+            const response = await fetch(url, {
+                headers: {
+                    'User-Agent': 'MIRA-WeatherTest/0.1.5 kkav45@ya.ru'
+                }
+            });
+            
+            console.log('MET Norway response status:', response.status);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            
+            try {
+                return await response.json();
+            } catch (error) {
+                throw new Error('Ошибка парсинга JSON от MET Norway');
+            }
+        }
+
+        async function fetch7Timer(lat, lon) {
+            // 7Timer! не поддерживает CORS, используем прокси
+            const url = 'http://www.7timer.info/api.php?lon=' + lon + '&lat=' + lat + '&product=astro&date=0&output=json';
+            
+            console.log('7Timer URL:', url);
+            
+            const response = await fetchWithCORSProxy(url);
+            console.log('7Timer response status:', response.status);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            
+            // Проверяем, что это действительно JSON
+            const text = await response.text();
+            console.log('7Timer response text:', text.substring(0, 200));
+            
+            // Проверяем, начинается ли с { или [ (признак JSON)
+            if (!text.trim().startsWith('{') && !text.trim().startsWith('[')) {
+                throw new Error('7Timer вернул не JSON (возможно, HTML или ошибка прокси)');
+            }
+            
+            try {
+                return JSON.parse(text);
+            } catch (error) {
+                console.error('7Timer JSON parse error:', error);
+                throw new Error('Ошибка парсинга JSON от 7Timer!');
+            }
+        }
+
+        // ==================== НОРМАЛИЗАЦИЯ ====================
+        function normalizeWeatherData(data, source) {
+            const normalized = {
+                temp: null,
+                humidity: null,
+                windSpeed: null,
+                windDirection: null,
+                precipitation: null,
+                cloudCover: null,
+                pressure: null,
+                wind80m: null,
+                wind100m: null,
+                temp80m: null,
+                temp100m: null
+            };
+
+            try {
+                switch (source) {
+                    case WEATHER_SERVICES.OPEN_METEO:
+                        console.log('Open-Meteo full data:', data);
+                        if (data && data.current) {
+                            normalized.temp = data.current.temperature_2m ?? null;
+                            normalized.humidity = data.current.relative_humidity_2m ?? null;
+                            normalized.windSpeed = (data.current.wind_speed_10m ?? 0) / 3.6;
+                            normalized.windDirection = data.current.wind_direction_10m ?? null;
+                            normalized.precipitation = data.current.precipitation ?? null;
+                            normalized.cloudCover = data.current.cloud_cover ?? null;
+                            normalized.pressure = data.current.pressure_msl ?? null;
+
+                            // Данные на высотах
+                            normalized.wind80m = data.hourly?.wind_speed_80m?.[0] ? data.hourly.wind_speed_80m[0] / 3.6 : null;
+                            normalized.wind100m = data.hourly?.wind_speed_100m?.[0] ? data.hourly.wind_speed_100m[0] / 3.6 : null;
+                            normalized.temp80m = data.hourly?.temperature_80m?.[0] ?? null;
+                            normalized.temp100m = data.hourly?.temperature_100m?.[0] ?? null;
+                        }
+                        break;
+
+                    case WEATHER_SERVICES.MET_NO:
+                        console.log('MET Norway full data:', data);
+                        const timeseries = data?.properties?.timeseries;
+                        if (timeseries && timeseries.length > 0) {
+                            console.log('MET Norway timeseries[0]:', timeseries[0]);
+                            const details = timeseries[0].data?.instant?.details;
+                            console.log('MET Norway details:', details);
+                            if (details) {
+                                normalized.temp = details.air_temperature ?? null;
+                                // MET Norway использует короткие имена
+                                normalized.humidity = details.relative_humidity_2m ?? details.relative_humidity ?? null;
+                                normalized.windSpeed = details.wind_speed_10m ?? details.wind_speed ?? null;
+                                normalized.windDirection = details.wind_from_direction_10m ?? details.wind_from_direction ?? null;
+                                normalized.precipitation = details.precipitation_amount ?? null;
+                                normalized.cloudCover = details.cloud_area_fraction ?? details.cloud_cover ?? null;
+                                normalized.pressure = details.air_pressure_at_sea_level ?? null;
+                            }
+                        }
+                        break;
+
+                    case WEATHER_SERVICES.HYBRID:
+                        console.log('HYBRID full data:', data);
+                        if (data && data.current) {
+                            normalized.temp = data.current.temperature_2m ?? null;
+                            normalized.humidity = data.current.relative_humidity_2m ?? null;
+                            normalized.windSpeed = (data.current.wind_speed_10m ?? 0) / 3.6;
+                            normalized.windDirection = data.current.wind_direction_10m ?? null;
+                            normalized.precipitation = data.current.precipitation ?? null;
+                            normalized.cloudCover = data.current.cloud_cover ?? null;
+                            normalized.pressure = data.current.pressure_msl ?? null;
+
+                            // Данные на высотах из Open-Meteo
+                            normalized.wind80m = data.hourly?.wind_speed_80m ? data.hourly.wind_speed_80m / 3.6 : null;
+                            normalized.wind100m = data.hourly?.wind_speed_100m ? data.hourly.wind_speed_100m / 3.6 : null;
+                            normalized.temp80m = data.hourly?.temperature_80m ?? null;
+                            normalized.temp100m = data.hourly?.temperature_100m ?? null;
+                        }
+                        break;
+
+                    case WEATHER_SERVICES.SEVENTIMER:
+                        if (data?.dataseries && data.dataseries.length > 0) {
+                            const first = data.dataseries[0];
+                            normalized.temp = first.temp2m ?? null;
+                            normalized.humidity = first.rh ?? null;
+                            normalized.windSpeed = (first.wind10m ?? 0) / 3.6;
+                            normalized.windDirection = first.winddir10m ?? null;
+                            normalized.precipitation = first.precip ?? null;
+                            normalized.cloudCover = first.cloudcover ?? null;
+                            normalized.pressure = null;
+                        }
+                        break;
+                }
+            } catch (error) {
+                console.error('Ошибка нормализации данных:', error, source, data);
+            }
+
+            return normalized;
+        }
+
+        // ==================== ОТРИСОВКА ====================
+        function renderServiceCard(service, result) {
+            const container = document.getElementById('resultsContainer');
+            const info = SERVICE_INFO[service];
+            
+            const card = document.createElement('div');
+            card.className = `service-card ${result.success ? 'success' : 'error'}`;
+
+            card.innerHTML = `
+                <div class="service-header">
+                    <div class="service-name">
+                        <i class="fas ${info.icon}"></i>
+                        ${info.name}
+                        <span class="service-badge ${info.badgeClass}">${info.badge}</span>
+                        ${!info.cors ? '<span class="service-badge" style="background:#a0aec0;color:#fff;font-size:9px;">CORS прокси</span>' : ''}
+                    </div>
+                    <div class="service-status ${result.success ? 'status-success' : 'status-error'}">
+                        ${result.success ? '✓ Успешно' : '✗ Ошибка'}
+                    </div>
+                </div>
+                <div class="service-body">
+                    ${result.success && result.data ? `
+                        <div class="params-grid">
+                            <div class="param-item">
+                                <span class="param-value">${isValidValue(result.data.temp) ? result.data.temp.toFixed(1) : '—'}</span>
+                                <span class="param-label">Темп. °C</span>
+                            </div>
+                            <div class="param-item">
+                                <span class="param-value">${isValidValue(result.data.windSpeed) ? result.data.windSpeed.toFixed(1) : '—'}</span>
+                                <span class="param-label">Ветер 10м м/с</span>
+                            </div>
+                            <div class="param-item">
+                                <span class="param-value">${isValidValue(result.data.humidity) ? result.data.humidity.toFixed(0) : '—'}</span>
+                                <span class="param-label">Влажность %</span>
+                            </div>
+                            <div class="param-item">
+                                <span class="param-value">${isValidValue(result.data.precipitation) ? result.data.precipitation.toFixed(1) : '—'}</span>
+                                <span class="param-label">Осадки мм</span>
+                            </div>
+                            <div class="param-item">
+                                <span class="param-value">${isValidValue(result.data.cloudCover) ? result.data.cloudCover.toFixed(0) : '—'}</span>
+                                <span class="param-label">Облачность %</span>
+                            </div>
+                            <div class="param-item">
+                                <span class="param-value">${isValidValue(result.data.pressure) ? result.data.pressure.toFixed(0) : '—'}</span>
+                                <span class="param-label">Давление гПа</span>
+                            </div>
+                        </div>
+                        ${info.cors && result.data.wind80m !== undefined ? `
+                        <div style="margin-top: 12px; padding: 10px; background: rgba(102, 126, 234, 0.05); border-radius: 8px; border: 1px solid rgba(102, 126, 234, 0.2);">
+                            <div style="font-size: 11px; font-weight: 600; color: #667eea; margin-bottom: 8px;">
+                                <i class="fas fa-layer-group"></i> ДАННЫЕ НА ВЫСОТАХ
+                            </div>
+                            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px;">
+                                <div style="text-align: center;">
+                                    <div style="font-size: 9px; color: rgba(0,0,0,0.5);">Ветер 80м</div>
+                                    <div style="font-size: 13px; font-weight: 700; color: #2d3748;">${isValidValue(result.data.wind80m) ? result.data.wind80m.toFixed(1) : '—'}</div>
+                                    <div style="font-size: 8px; color: rgba(0,0,0,0.4);">м/с</div>
+                                </div>
+                                <div style="text-align: center;">
+                                    <div style="font-size: 9px; color: rgba(0,0,0,0.5);">Ветер 100м</div>
+                                    <div style="font-size: 13px; font-weight: 700; color: #2d3748;">${isValidValue(result.data.wind100m) ? result.data.wind100m.toFixed(1) : '—'}</div>
+                                    <div style="font-size: 8px; color: rgba(0,0,0,0.4);">м/с</div>
+                                </div>
+                                <div style="text-align: center;">
+                                    <div style="font-size: 9px; color: rgba(0,0,0,0.5);">Темп. 80м</div>
+                                    <div style="font-size: 13px; font-weight: 700; color: #2d3748;">${isValidValue(result.data.temp80m) ? result.data.temp80m.toFixed(1) : '—'}</div>
+                                    <div style="font-size: 8px; color: rgba(0,0,0,0.4);">°C</div>
+                                </div>
+                                <div style="text-align: center;">
+                                    <div style="font-size: 9px; color: rgba(0,0,0,0.5);">Темп. 100м</div>
+                                    <div style="font-size: 13px; font-weight: 700; color: #2d3748;">${isValidValue(result.data.temp100m) ? result.data.temp100m.toFixed(1) : '—'}</div>
+                                    <div style="font-size: 8px; color: rgba(0,0,0,0.4);">°C</div>
+                                </div>
+                            </div>
+                        </div>
+                        ` : ''}
+                    ` : `
+                        <div class="service-error">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            ${result.error || 'Нет данных'}
+                        </div>
+                    `}
+                    <div class="service-time">
+                        <i class="fas fa-clock"></i>
+                        ${result.responseTime} мс
+                    </div>
+                </div>
+            `;
+
+            container.appendChild(card);
+        }
+
+        // Проверка значения на валидность
+        function isValidValue(value) {
+            return value !== null && value !== undefined && !isNaN(value);
+        }
+
+        function renderComparisonTable() {
+            const tbody = document.getElementById('comparisonTableBody');
+            tbody.innerHTML = '';
+
+            const services = Object.keys(results);
+            if (services.length === 0) return;
+
+            services.forEach(service => {
+                const result = results[service];
+                const info = SERVICE_INFO[service];
+
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td><strong>${info.name}</strong></td>
+                    <td>${result.success && isValidValue(result.data?.temp) ? result.data.temp.toFixed(1) : '—'}</td>
+                    <td>${result.success && isValidValue(result.data?.windSpeed) ? result.data.windSpeed.toFixed(1) : '—'}</td>
+                    <td>${result.success && isValidValue(result.data?.humidity) ? result.data.humidity.toFixed(0) : '—'}</td>
+                    <td>${result.responseTime}</td>
+                `;
+
+                tbody.appendChild(row);
+            });
+
+            document.getElementById('comparisonSection').style.display = 'block';
+        }
+
+        function renderComparisonChart() {
+            const services = Object.keys(results);
+            const successServices = services.filter(s => results[s].success && results[s].data);
+
+            if (successServices.length === 0) return;
+
+            const trace1 = {
+                x: successServices.map(s => SERVICE_INFO[s].name),
+                y: successServices.map(s => isValidValue(results[s].data?.temp) ? results[s].data.temp : 0),
+                name: 'Температура (°C)',
+                type: 'bar',
+                marker: { color: '#e53e3e' }
+            };
+
+            const trace2 = {
+                x: successServices.map(s => SERVICE_INFO[s].name),
+                y: successServices.map(s => isValidValue(results[s].data?.windSpeed) ? results[s].data.windSpeed : 0),
+                name: 'Ветер (м/с)',
+                type: 'bar',
+                marker: { color: '#3182ce' },
+                yaxis: 'y2'
+            };
+
+            const trace3 = {
+                x: successServices.map(s => SERVICE_INFO[s].name),
+                y: successServices.map(s => isValidValue(results[s].data?.humidity) ? results[s].data.humidity : 0),
+                name: 'Влажность (%)',
+                type: 'bar',
+                marker: { color: '#38a169' },
+                yaxis: 'y3'
+            };
+
+            const layout = {
+                barmode: 'group',
+                showlegend: true,
+                legend: { x: 0, y: 1 },
+                margin: { t: 30, l: 50, r: 50, b: 50 },
+                yaxis: { title: 'Температура (°C)' },
+                yaxis2: {
+                    title: 'Ветер (м/с)',
+                    overlaying: 'y',
+                    side: 'right',
+                    position: 0.15
+                },
+                yaxis3: {
+                    title: 'Влажность (%)',
+                    overlaying: 'y',
+                    side: 'right',
+                    position: 0.85
+                }
+            };
+
+            Plotly.newPlot('comparisonChart', [trace1, trace2, trace3], layout, { responsive: true, displayModeBar: false });
+
+            document.getElementById('chartsSection').style.display = 'block';
+        }
+
+        function clearResults() {
+            results = {};
+            document.getElementById('resultsContainer').innerHTML = '';
+            document.getElementById('comparisonSection').style.display = 'none';
+            document.getElementById('chartsSection').style.display = 'none';
+            showToast('🗑️ Результаты очищены', 'info');
+        }
+
+        // ==================== TOAST ====================
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            const toastMessage = document.getElementById('toastMessage');
+            const icon = toast.querySelector('i');
+
+            toastMessage.textContent = message;
+            
+            icon.className = {
+                success: 'fas fa-check-circle',
+                error: 'fas fa-times-circle',
+                info: 'fas fa-info-circle'
+            }[type];
+
+            toast.className = `toast ${type} show`;
+
+            setTimeout(() => {
+                toast.className = 'toast';
+            }, 3000);
+        }
+
+        // ==================== ИНИЦИАЛИЗАЦИЯ ====================
+        window.addEventListener('DOMContentLoaded', () => {
+            initMap();
+        });
+    </script>
+</body>
+</html>

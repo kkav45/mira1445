@@ -1,0 +1,1380 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MIRA — Тест: Визуализация метео-данных по маршруту</title>
+
+    <!-- OpenLayers v9.2.4 -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v9.2.4/ol.css">
+    <script src="https://cdn.jsdelivr.net/npm/ol@v9.2.4/dist/ol.js"></script>
+
+    <!-- Plotly -->
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #0f0f1a;
+            color: #2d3748;
+        }
+
+        /* Карта на всю ширину */
+        #map {
+            width: 100%;
+            height: 70vh;
+            position: relative;
+        }
+
+        /* Верхняя панель */
+        .header-panel {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            padding: 20px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(102, 126, 234, 0.3);
+        }
+
+        .header-title {
+            color: #fff;
+            font-size: 20px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .header-title i {
+            color: #667eea;
+        }
+
+        .header-controls {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: none;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.3s;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #38a169 0%, #2f855a 100%);
+            color: #fff;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Нижняя панель с графиками */
+        .bottom-panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 20px 30px;
+            height: 30vh;
+            overflow-y: auto;
+        }
+
+        .panel-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .tab {
+            padding: 8px 16px;
+            border-radius: 6px;
+            background: rgba(0, 0, 0, 0.05);
+            color: rgba(0, 0, 0, 0.6);
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .tab.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+        }
+
+        .chart-container {
+            width: 100%;
+            height: 200px;
+            border-radius: 10px;
+            background: rgba(0, 0, 0, 0.02);
+        }
+
+        /* Переключатель слоёв */
+        .layer-selector {
+            position: fixed;
+            top: 80px;
+            left: 20px;
+            z-index: 1000;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .layer-selector-title {
+            font-size: 11px;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .layer-selector select {
+            width: 100%;
+            padding: 8px 10px;
+            border-radius: 6px;
+            border: 1px solid rgba(0, 0, 0, 0.15);
+            background: #fff;
+            font-size: 11px;
+            color: #2d3748;
+            cursor: pointer;
+            min-width: 200px;
+        }
+
+        .layer-legend {
+            margin-top: 10px;
+            font-size: 9px;
+            color: rgba(0, 0, 0, 0.6);
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 4px;
+        }
+
+        .legend-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 3px;
+        }
+
+        /* Информация о маршруте */
+        .route-info {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            z-index: 1000;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            min-width: 250px;
+        }
+
+        .route-info-title {
+            font-size: 11px;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .route-stat {
+            display: flex;
+            justify-content: space-between;
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+            font-size: 12px;
+        }
+
+        .route-stat:last-child {
+            border-bottom: none;
+        }
+
+        .route-stat-label {
+            color: rgba(0, 0, 0, 0.6);
+        }
+
+        .route-stat-value {
+            font-weight: 600;
+            color: #2d3748;
+        }
+
+        /* Toast уведомления */
+        .toast {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-100px);
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 12px 24px;
+            border-radius: 12px;
+            color: #2d3748;
+            font-size: 14px;
+            z-index: 3000;
+            opacity: 0;
+            transition: all 0.4s;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+
+        .toast.success i { color: #38a169; }
+        .toast.error i { color: #e53e3e; }
+        .toast.info i { color: #3182ce; }
+
+        /* Popup на карте */
+        .ol-popup {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.98);
+            backdrop-filter: blur(10px);
+            border-radius: 10px;
+            padding: 12px 16px;
+            color: #2d3748;
+            font-size: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            white-space: nowrap;
+            max-width: 300px;
+        }
+
+        .ol-popup:after {
+            content: '';
+            position: absolute;
+            bottom: -8px;
+            left: 50%;
+            transform: translateX(-50%);
+            border: 8px solid transparent;
+            border-top-color: rgba(255, 255, 255, 0.98);
+        }
+
+        .popup-title {
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 8px;
+            font-size: 13px;
+        }
+
+        .popup-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 0;
+            font-size: 11px;
+        }
+
+        .popup-label {
+            color: rgba(0, 0, 0, 0.6);
+        }
+
+        .popup-value {
+            font-weight: 600;
+        }
+
+        /* Прогресс бар */
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 3px;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s;
+        }
+    </style>
+</head>
+<body>
+    <!-- Верхняя панель -->
+    <div class="header-panel">
+        <div class="header-title">
+            <i class="fas fa-route"></i>
+            <span>MIRA — Тест: Метео-визуализация по маршруту</span>
+        </div>
+        <div class="header-controls">
+            <button class="btn btn-primary" onclick="generateTestRoute()">
+                <i class="fas fa-magic"></i> Тестовый маршрут
+            </button>
+            <button class="btn btn-success" onclick="analyzeWeather()">
+                <i class="fas fa-cloud-sun"></i> Анализ погоды
+            </button>
+        </div>
+    </div>
+
+    <!-- Переключатель слоёв -->
+    <div class="layer-selector">
+        <div class="layer-selector-title">
+            <i class="fas fa-layer-group"></i> Слой данных
+        </div>
+        <select id="weatherLayerSelect" onchange="changeWeatherLayer()">
+            <option value="risk">🎯 Интегральный риск</option>
+            <option value="wind">💨 Ветер (м/с)</option>
+            <option value="temp">🌡️ Температура (°C)</option>
+            <option value="precip">🌧️ Осадки (мм/ч)</option>
+            <option value="turbulence">🌪️ Турбулентность</option>
+            <option value="visibility">👁️ Видимость (км)</option>
+        </select>
+        <div class="layer-legend" id="layerLegend">
+            <div class="legend-item">
+                <div class="legend-color" style="background: #38a169;"></div>
+                <span>Низкий риск</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #ed8936;"></div>
+                <span>Средний риск</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-color" style="background: #e53e3e;"></div>
+                <span>Высокий риск</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Информация о маршруте -->
+    <div class="route-info">
+        <div class="route-info-title">
+            <i class="fas fa-info-circle"></i> Информация о маршруте
+        </div>
+        <div class="route-stat">
+            <span class="route-stat-label">Длина:</span>
+            <span class="route-stat-value" id="routeDistance">—</span>
+        </div>
+        <div class="route-stat">
+            <span class="route-stat-label">Сегментов:</span>
+            <span class="route-stat-value" id="routeSegments">—</span>
+        </div>
+        <div class="route-stat">
+            <span class="route-stat-label">Точек анализа:</span>
+            <span class="route-stat-value" id="analysisPoints">—</span>
+        </div>
+        <div class="route-stat">
+            <span class="route-stat-label">Общий риск:</span>
+            <span class="route-stat-value" id="overallRisk">—</span>
+        </div>
+        <div class="route-stat">
+            <span class="route-stat-label">API запросов:</span>
+            <span class="route-stat-value" id="apiRequests">—</span>
+        </div>
+        <div class="progress-bar">
+            <div class="progress-fill" id="riskProgress" style="width: 0%;"></div>
+        </div>
+    </div>
+
+    <!-- Карта -->
+    <div id="map"></div>
+
+    <!-- Toast уведомления -->
+    <div class="toast" id="toast">
+        <i class="fas fa-info-circle"></i>
+        <span id="toastMessage"></span>
+    </div>
+
+    <!-- Нижняя панель с графиками -->
+    <div class="bottom-panel">
+        <div class="panel-tabs">
+            <div class="tab active" onclick="showTab('profile')">Профиль маршрута</div>
+            <div class="tab" onclick="showTab('wind')">Ветер по высотам</div>
+            <div class="tab" onclick="showTab('temp')">Температура</div>
+            <div class="tab" onclick="showTab('risk')">Риски</div>
+        </div>
+        <div id="chartContainer" class="chart-container"></div>
+    </div>
+
+    <script>
+        // ==================== КОНФИГУРАЦИЯ ====================
+        const SEGMENT_LENGTH_KM = 5; // Длина сегмента анализа (км)
+        const INTERPOLATION_RADIUS_KM = 25; // Радиус интерполяции (км)
+        const ANALYSIS_HEIGHTS = [250, 350, 450, 550]; // Высоты для анализа (м)
+
+        // Пороговые значения
+        const thresholds = {
+            windGround: 10,
+            windAlt: 15,
+            precip: 1.4,
+            visibility: 5,
+            tempDewpoint: 2
+        };
+
+        // Глобальные переменные
+        let map;
+        let routeOverlay;
+        let weatherOverlay;
+        let interpolationOverlay;
+        let routePoints = [];
+        let routeSegments = [];
+        let weatherData = [];
+        let currentLayer = 'risk';
+        let popupOverlay;
+
+        // ==================== ИНИЦИАЛИЗАЦИЯ КАРТЫ ====================
+        function initMap() {
+            const center = ol.proj.fromLonLat([37.6173, 55.7558]); // Москва
+
+            routeOverlay = new ol.layer.Vector({
+                source: new ol.source.Vector()
+            });
+
+            weatherOverlay = new ol.layer.Vector({
+                source: new ol.source.Vector()
+            });
+
+            interpolationOverlay = new ol.layer.Vector({
+                source: new ol.source.Vector()
+            });
+
+            map = new ol.Map({
+                target: 'map',
+                layers: [
+                    new ol.layer.Tile({
+                        source: new ol.source.OSM()
+                    }),
+                    interpolationOverlay,
+                    weatherOverlay,
+                    routeOverlay
+                ],
+                view: new ol.View({
+                    center: center,
+                    zoom: 8
+                })
+            });
+
+            // Popup
+            const popupContainer = document.createElement('div');
+            popupContainer.className = 'ol-popup';
+            popupContainer.id = 'popup';
+            document.getElementById('map').appendChild(popupContainer);
+
+            popupOverlay = new ol.Overlay({
+                element: popupContainer,
+                positioning: 'bottom-center',
+                stopEvent: false
+            });
+            map.addOverlay(popupOverlay);
+
+            // Клик по карте
+            map.on('click', function(evt) {
+                const feature = map.forEachFeatureAtPixel(evt.pixel, function(feature) {
+                    return feature;
+                });
+
+                if (feature && feature.get('segmentData')) {
+                    const seg = feature.get('segmentData');
+                    const coords = evt.coordinate;
+                    showSegmentPopup(coords, seg);
+                } else {
+                    popupOverlay.setPosition(undefined);
+                }
+            });
+
+            showToast('Карта инициализирована. OpenLayers v' + ol.VERSION, 'success');
+        }
+
+        // ==================== ГЕНЕРАЦИЯ ТЕСТОВОГО МАРШРУТА ====================
+        function generateTestRoute() {
+            // Маршрут Москва → Владимир (~180 км)
+            routePoints = [
+                { lat: 55.7558, lon: 37.6173, name: 'Москва (Старт)' },
+                { lat: 55.8833, lon: 38.0333, name: 'Ногинск' },
+                { lat: 56.0067, lon: 39.0767, name: 'Покров' },
+                { lat: 56.1297, lon: 40.3969, name: 'Владимир (Финиш)' }
+            ];
+
+            drawRoute();
+            showToast(`Маршрут построен: ${routePoints.length} точек`, 'success');
+        }
+
+        // ==================== ОТРИСОВКА МАРШРУТА ====================
+        function drawRoute() {
+            if (routePoints.length < 2) return;
+
+            const source = routeOverlay.getSource();
+            source.clear();
+
+            // Расчёт общей дистанции
+            let totalDistance = 0;
+            for (let i = 1; i < routePoints.length; i++) {
+                totalDistance += calculateDistance(routePoints[i - 1], routePoints[i]);
+            }
+
+            // Линия маршрута
+            const coords = routePoints.map(p => ol.proj.fromLonLat([p.lon, p.lat]));
+            const lineFeature = new ol.Feature({
+                geometry: new ol.geom.LineString(coords)
+            });
+            lineFeature.setStyle(new ol.style.Style({
+                stroke: new ol.style.Stroke({
+                    color: 'rgba(102, 126, 234, 0.9)',
+                    width: 4,
+                    lineDash: [10, 5]
+                })
+            }));
+            source.addFeature(lineFeature);
+
+            // Точки маршрута
+            const pointLabels = ['A', 'B', 'C', 'D', 'E', 'F'];
+            routePoints.forEach((point, index) => {
+                const projCoords = ol.proj.fromLonLat([point.lon, point.lat]);
+                const markerFeature = new ol.Feature({
+                    geometry: new ol.geom.Point(projCoords)
+                });
+
+                const color = index === 0 ? '#38a169' : index === routePoints.length - 1 ? '#e53e3e' : '#667eea';
+                const label = pointLabels[index] || `${index + 1}`;
+
+                markerFeature.setStyle(new ol.style.Style({
+                    image: new ol.style.Circle({
+                        radius: 10,
+                        fill: new ol.style.Fill({ color: color }),
+                        stroke: new ol.style.Stroke({ color: '#fff', width: 2 })
+                    }),
+                    text: new ol.style.Text({
+                        text: label,
+                        font: 'bold 14px sans-serif',
+                        fill: new ol.style.Fill({ color: '#fff' }),
+                        stroke: new ol.style.Stroke({ color: '#000', width: 3 }),
+                        offsetY: -15
+                    })
+                }));
+                source.addFeature(markerFeature);
+            });
+
+            // Центрирование карты
+            const extent = ol.extent.boundingExtent(coords);
+            map.getView().fit(extent, { padding: [50, 50, 150, 50], duration: 500 });
+
+            // Обновление информации
+            document.getElementById('routeDistance').textContent = `${totalDistance.toFixed(1)} км`;
+            document.getElementById('routeSegments').textContent = `~${Math.ceil(totalDistance / SEGMENT_LENGTH_KM)}`;
+        }
+
+        // ==================== АНАЛИЗ ПОГОДЫ ====================
+        function analyzeWeather() {
+            if (routePoints.length < 2) {
+                showToast('Сначала постройте маршрут', 'error');
+                return;
+            }
+
+            // Расчёт дистанции
+            let totalDistance = 0;
+            for (let i = 1; i < routePoints.length; i++) {
+                totalDistance += calculateDistance(routePoints[i - 1], routePoints[i]);
+            }
+
+            // Количество сегментов
+            const segmentCount = Math.ceil(totalDistance / SEGMENT_LENGTH_KM);
+            const segmentLength = totalDistance / segmentCount;
+
+            // Генерация точек анализа
+            routeSegments = [];
+            weatherData = [];
+            let apiRequestCount = 0;
+
+            for (let i = 0; i <= segmentCount; i++) {
+                const ratio = i / segmentCount;
+                const distanceFromStart = ratio * totalDistance;
+
+                // Интерполяция координат
+                let segmentPoint;
+                let remainingDistance = distanceFromStart;
+                for (let j = 0; j < routePoints.length - 1; j++) {
+                    const segDist = calculateDistance(routePoints[j], routePoints[j + 1]);
+                    if (remainingDistance <= segDist) {
+                        const t = remainingDistance / segDist;
+                        segmentPoint = {
+                            lat: routePoints[j].lat + (routePoints[j + 1].lat - routePoints[j].lat) * t,
+                            lon: routePoints[j].lon + (routePoints[j + 1].lon - routePoints[j].lon) * t,
+                            distanceFromStart
+                        };
+                        break;
+                    }
+                    remainingDistance -= segDist;
+                }
+
+                if (!segmentPoint) {
+                    const last = routePoints[routePoints.length - 1];
+                    segmentPoint = { lat: last.lat, lon: last.lon, distanceFromStart: totalDistance };
+                }
+
+                // Симуляция API запроса (в реальности здесь был бы вызов weather API)
+                apiRequestCount++;
+                const weather = simulateWeatherAPI(segmentPoint.lat, segmentPoint.lon);
+                weatherData.push(weather);
+
+                // Анализ по высотам
+                const heightAnalysis = analyzeHeightProfile(segmentPoint, weather);
+
+                routeSegments.push({
+                    point: segmentPoint,
+                    distance: distanceFromStart,
+                    weather: weather,
+                    heightAnalysis: heightAnalysis,
+                    risk: calculateSegmentRisk(heightAnalysis, weather),
+                    riskScore: calculateRiskScore(heightAnalysis, weather)
+                });
+            }
+
+            // Отрисовка результатов
+            drawWeatherVisualization();
+            drawInterpolationGrid();
+
+            // Обновление статистики
+            const avgRisk = routeSegments.reduce((sum, s) => sum + s.riskScore, 0) / routeSegments.length;
+            const maxRisk = Math.max(...routeSegments.map(s => s.riskScore));
+
+            let riskText = 'НИЗКИЙ';
+            let riskColor = '#38a169';
+            if (avgRisk > 2 || maxRisk === 3) {
+                riskText = 'ВЫСОКИЙ';
+                riskColor = '#e53e3e';
+            } else if (avgRisk > 1.5 || maxRisk === 2) {
+                riskText = 'СРЕДНИЙ';
+                riskColor = '#ed8936';
+            }
+
+            document.getElementById('analysisPoints').textContent = routeSegments.length;
+            document.getElementById('overallRisk').textContent = riskText;
+            document.getElementById('overallRisk').style.color = riskColor;
+            document.getElementById('apiRequests').textContent = apiRequestCount;
+            document.getElementById('riskProgress').style.width = `${(avgRisk / 3) * 100}%`;
+            document.getElementById('riskProgress').style.background = riskColor;
+
+            // Построение графика
+            drawProfileChart();
+
+            showToast(`Анализ завершён: ${routeSegments.length} сегментов, ${apiRequestCount} API запросов`, 'success');
+        }
+
+        // ==================== ДЕМО ДАННЫЕ (реалистичные значения) ====================
+        function simulateWeatherAPI(lat, lon) {
+            // Демо данные с реалистичными значениями для центральной России
+            // Вариация параметров вдоль маршрута для наглядности
+            
+            // Расчёт расстояния от начала маршрута (условно)
+            const distFromStart = (lat - 55.7558) * 111 + (lon - 37.6173) * 111 * Math.cos(lat * Math.PI / 180);
+            
+            // Плавное изменение параметров для демонстрации
+            const progress = Math.max(0, Math.min(1, distFromStart / 150)); // 0..1 вдоль маршрута
+
+            return {
+                temp2m: 18 + Math.sin(progress * Math.PI * 2) * 4,           // 14-22°C
+                wind10m: 4 + progress * 6 + Math.sin(progress * Math.PI * 3) * 2, // 4-12 м/с
+                windDirection: Math.floor(180 + progress * 90),              // 180-270° (Ю-З)
+                precip: progress > 0.6 ? Math.sin((progress - 0.6) * Math.PI * 5) * 3 : 0, // Осадки во второй половине
+                visibility: 10 - progress * 6 + Math.cos(progress * Math.PI * 4) * 2, // 10→4 км
+                rh: 55 + progress * 30 + Math.sin(progress * Math.PI * 2) * 10, // 55-85%
+                pressure: 1015 - progress * 8 + Math.sin(progress * Math.PI * 3) * 3, // 1015-1007 гПа
+                cloudCover: 30 + progress * 50 + Math.cos(progress * Math.PI * 4) * 20, // 30-100%
+                dewpoint: 10 + progress * 5 + Math.sin(progress * Math.PI * 2) * 3  // 10-15°C
+            };
+        }
+
+        // ==================== АНАЛИЗ ПО ВЫСОТАМ ====================
+        function analyzeHeightProfile(point, weather) {
+            return ANALYSIS_HEIGHTS.map(height => {
+                // Ветер на высоте (увеличивается на 0.5 м/с на 100м)
+                const windAtHeight = weather.wind10m + (height / 100) * 0.5;
+
+                // Температура на высоте (уменьшается на 0.65°C на 100м)
+                const tempAtHeight = weather.temp2m - (height / 100) * 0.65;
+
+                // Давление на высоте (барометрическая формула)
+                const pressureAtHeight = weather.pressure * Math.pow(1 - 0.0065 * height / 288.15, 5.255);
+
+                // Турбулентность (зависит от градиента ветра)
+                const turbulence = Math.min(10, Math.abs(windAtHeight - weather.wind10m) * 1.5 + (weather.cloudCover / 100) * 2);
+
+                // Риск обледенения (температура от -10°C до +5°C при влажности > 80%)
+                const icingRisk = tempAtHeight <= 5 && tempAtHeight >= -10 && weather.rh > 80;
+
+                return {
+                    height,
+                    wind: windAtHeight.toFixed(1),
+                    temp: tempAtHeight.toFixed(1),
+                    pressure: (pressureAtHeight * 0.75006).toFixed(0), // мм рт.ст.
+                    turbulence: turbulence.toFixed(1),
+                    icingRisk,
+                    rh: weather.rh.toFixed(0),
+                    cloudCover: weather.cloudCover.toFixed(0)
+                };
+            });
+        }
+
+        // ==================== РАСЧЁТ РИСКА ====================
+        function calculateSegmentRisk(heightAnalysis, weather) {
+            let maxRisk = 'low';
+            let riskScore = 0;
+            const riskFactors = [];
+
+            heightAnalysis.forEach(h => {
+                const windVal = parseFloat(h.wind);
+                const turbVal = parseFloat(h.turbulence);
+
+                // Ветер (порог 15 м/с для высоты)
+                if (windVal > thresholds.windAlt) {
+                    maxRisk = 'high';
+                    riskScore = Math.max(riskScore, 3);
+                    if (!riskFactors.includes(`Ветер ${windVal} м/с`)) {
+                        riskFactors.push(`Ветер ${windVal} м/с`);
+                    }
+                } else if (windVal > thresholds.windAlt * 0.8) {
+                    if (maxRisk === 'low') maxRisk = 'medium';
+                    riskScore = Math.max(riskScore, 2);
+                    if (!riskFactors.includes(`Ветер ${windVal} м/с`)) {
+                        riskFactors.push(`Ветер ${windVal} м/с (повышенный)`);
+                    }
+                }
+
+                // Турбулентность
+                if (turbVal > 6) {
+                    maxRisk = 'high';
+                    riskScore = Math.max(riskScore, 3);
+                    if (!riskFactors.includes(`Турбулентность ${turbVal}`)) {
+                        riskFactors.push(`Турбулентность ${turbVal}`);
+                    }
+                } else if (turbVal > 4) {
+                    if (maxRisk === 'low') maxRisk = 'medium';
+                    riskScore = Math.max(riskScore, 2);
+                    if (!riskFactors.includes(`Турбулентность ${turbVal}`)) {
+                        riskFactors.push(`Турбулентность ${turbVal} (умеренная)`);
+                    }
+                }
+
+                // Обледенение
+                if (h.icingRisk) {
+                    if (maxRisk === 'low') maxRisk = 'medium';
+                    riskScore = Math.max(riskScore, 2);
+                    if (!riskFactors.includes('Обледенение')) {
+                        riskFactors.push('Обледенение');
+                    }
+                }
+            });
+
+            // Осадки (порог 1.4 мм/ч)
+            if (weather.precip > thresholds.precip) {
+                maxRisk = 'high';
+                riskScore = Math.max(riskScore, 3);
+                if (!riskFactors.includes(`Осадки ${weather.precip.toFixed(1)} мм/ч`)) {
+                    riskFactors.push(`Осадки ${weather.precip.toFixed(1)} мм/ч`);
+                }
+            } else if (weather.precip > 0.5) {
+                if (maxRisk === 'low') maxRisk = 'medium';
+                riskScore = Math.max(riskScore, 2);
+            }
+
+            // Видимость (порог 5 км)
+            if (weather.visibility < thresholds.visibility) {
+                maxRisk = 'high';
+                riskScore = Math.max(riskScore, 3);
+                if (!riskFactors.includes(`Видимость ${weather.visibility.toFixed(1)} км`)) {
+                    riskFactors.push(`Видимость ${weather.visibility.toFixed(1)} км`);
+                }
+            } else if (weather.visibility < 8) {
+                if (maxRisk === 'low') maxRisk = 'medium';
+                riskScore = Math.max(riskScore, 2);
+            }
+
+            return maxRisk;
+        }
+
+        function calculateRiskScore(heightAnalysis, weather) {
+            const riskMap = { low: 1, medium: 2, high: 3 };
+            return riskMap[calculateSegmentRisk(heightAnalysis, weather)];
+        }
+
+        function getRiskFactors(heightAnalysis, weather) {
+            const factors = [];
+            heightAnalysis.forEach(h => {
+                const windVal = parseFloat(h.wind);
+                const turbVal = parseFloat(h.turbulence);
+
+                if (windVal > thresholds.windAlt * 0.8) factors.push(`Ветер ${windVal} м/с`);
+                if (turbVal > 4) factors.push(`Турбулентность ${turbVal}`);
+                if (h.icingRisk) factors.push('Обледенение');
+            });
+
+            if (weather.precip > 0.5) factors.push(`Осадки ${weather.precip.toFixed(1)} мм/ч`);
+            if (weather.visibility < 8) factors.push(`Видимость ${weather.visibility.toFixed(1)} км`);
+
+            return factors;
+        }
+
+        // ==================== ВИЗУАЛИЗАЦИЯ ПОГОДЫ ====================
+        function drawWeatherVisualization() {
+            const source = weatherOverlay.getSource();
+            source.clear();
+
+            // Отрисовка сегментов с цветовой кодировкой для выбранного слоя
+            for (let i = 0; i < routeSegments.length - 1; i++) {
+                const seg1 = routeSegments[i];
+                const seg2 = routeSegments[i + 1];
+
+                const coords1 = ol.proj.fromLonLat([seg1.point.lon, seg1.point.lat]);
+                const coords2 = ol.proj.fromLonLat([seg2.point.lon, seg2.point.lat]);
+
+                // Получаем значение для текущего слоя
+                const value = getLayerValue(seg1, currentLayer);
+                const risk = getLayerRisk(value, currentLayer);
+                const layerColors = getLayerColor(value, currentLayer);
+                const color = layerColors[risk];
+
+                const lineFeature = new ol.Feature({
+                    geometry: new ol.geom.LineString([coords1, coords2]),
+                    segmentData: {
+                        ...seg1,
+                        riskFactors: getRiskFactors(seg1.heightAnalysis, seg1.weather),
+                        layerValue: value,
+                        layerName: currentLayer
+                    }
+                });
+
+                lineFeature.setStyle(new ol.style.Style({
+                    stroke: new ol.style.Stroke({
+                        color: color,
+                        width: 12,
+                        lineCap: 'round'
+                    })
+                }));
+
+                source.addFeature(lineFeature);
+            }
+
+            // Маркеры точек анализа
+            routeSegments.forEach((seg, index) => {
+                const coords = ol.proj.fromLonLat([seg.point.lon, seg.point.lat]);
+                const value = getLayerValue(seg, currentLayer);
+                const risk = getLayerRisk(value, currentLayer);
+                const layerColors = getLayerColor(value, currentLayer);
+                const color = layerColors[risk];
+
+                const markerFeature = new ol.Feature({
+                    geometry: new ol.geom.Point(coords),
+                    segmentData: {
+                        ...seg,
+                        riskFactors: getRiskFactors(seg.heightAnalysis, seg.weather),
+                        layerValue: value,
+                        layerName: currentLayer
+                    }
+                });
+
+                markerFeature.setStyle(new ol.style.Style({
+                    image: new ol.style.Circle({
+                        radius: 8,
+                        fill: new ol.style.Fill({ color: color }),
+                        stroke: new ol.style.Stroke({ color: '#fff', width: 2 })
+                    }),
+                    text: new ol.style.Text({
+                        text: `${index + 1}`,
+                        font: 'bold 10px sans-serif',
+                        fill: new ol.style.Fill({ color: '#fff' }),
+                        stroke: new ol.style.Stroke({ color: '#000', width: 2 }),
+                        offsetY: -12
+                    })
+                }));
+
+                source.addFeature(markerFeature);
+            });
+        }
+
+        // ==================== ИНТЕРПОЛЯЦИЯ ====================
+        function drawInterpolationGrid() {
+            const source = interpolationOverlay.getSource();
+            source.clear();
+
+            // Создаём сетку интерполяции вокруг маршрута
+            routeSegments.forEach((seg, index) => {
+                const centerLat = seg.point.lat;
+                const centerLon = seg.point.lon;
+
+                // Радиус интерполяции в градусах (приблизительно)
+                const radiusDeg = INTERPOLATION_RADIUS_KM / 111;
+
+                // Генерируем точки в круге
+                const numPoints = 12;
+                for (let angle = 0; angle < 360; angle += 360 / numPoints) {
+                    const rad = angle * Math.PI / 180;
+                    const lat = centerLat + radiusDeg * Math.cos(rad);
+                    const lon = centerLon + radiusDeg * Math.sin(rad) / Math.cos(centerLat * Math.PI / 180);
+
+                    const coords = ol.proj.fromLonLat([lon, lat]);
+
+                    // Цвет на основе интерполированных данных
+                    const interpolatedValue = interpolateWeatherValue(seg, index);
+                    const color = getInterpolatedColor(interpolatedValue, currentLayer);
+
+                    const pointFeature = new ol.Feature({
+                        geometry: new ol.geom.Point(coords)
+                    });
+
+                    pointFeature.setStyle(new ol.style.Style({
+                        image: new ol.style.Circle({
+                            radius: 4,
+                            fill: new ol.style.Fill({ color: color }),
+                            stroke: new ol.style.Stroke({ color: 'rgba(255,255,255,0.5)', width: 1 })
+                        })
+                    }));
+
+                    source.addFeature(pointFeature);
+                }
+
+                // Круг радиуса интерполяции
+                const circleFeature = new ol.Feature({
+                    geometry: new ol.geom.Circle(
+                        ol.proj.fromLonLat([centerLon, centerLat]),
+                        INTERPOLATION_RADIUS_KM * 1000
+                    )
+                });
+
+                circleFeature.setStyle(new ol.style.Style({
+                    stroke: new ol.style.Stroke({
+                        color: 'rgba(102, 126, 234, 0.3)',
+                        width: 1,
+                        lineDash: [5, 10]
+                    }),
+                    fill: new ol.style.Fill({
+                        color: 'rgba(102, 126, 234, 0.05)'
+                    })
+                }));
+
+                source.addFeature(circleFeature);
+            });
+        }
+
+        function interpolateWeatherValue(segment, index) {
+            // Простая IDW интерполяция
+            const weight = 1 / (index + 1);
+            const baseValue = segment.riskScore;
+            return baseValue * weight;
+        }
+
+        function getInterpolatedColor(value, layer) {
+            if (layer === 'risk') {
+                const alpha = 0.3 + value * 0.2;
+                if (value > 2) return `rgba(229, 62, 62, ${alpha})`;
+                if (value > 1) return `rgba(237, 137, 54, ${alpha})`;
+                return `rgba(56, 161, 105, ${alpha})`;
+            }
+            // Для других слоёв можно добавить свои градиенты
+            return `rgba(102, 126, 234, 0.3)`;
+        }
+
+        // ==================== ПОСТРОЕНИЕ ГРАФИКОВ ====================
+        function drawProfileChart() {
+            const distances = routeSegments.map(s => s.distance.toFixed(1));
+            const risks = routeSegments.map(s => s.riskScore);
+            const winds = routeSegments.map(s => parseFloat(s.weather.wind10m));
+            const temps = routeSegments.map(s => s.weather.temp2m.toFixed(1));
+            const precip = routeSegments.map(s => s.weather.precip.toFixed(1));
+            const visibility = routeSegments.map(s => s.weather.visibility.toFixed(1));
+            const turbulence = routeSegments.map(s => {
+                const avgTurb = s.heightAnalysis.reduce((sum, h) => sum + parseFloat(h.turbulence), 0) / s.heightAnalysis.length;
+                return avgTurb.toFixed(1);
+            });
+
+            const traceRisk = {
+                x: distances,
+                y: risks,
+                type: 'scatter',
+                mode: 'lines+markers',
+                name: 'Риск',
+                line: { color: '#e53e3e', width: 3 },
+                marker: { size: 8 },
+                yaxis: 'y1'
+            };
+
+            const traceWind = {
+                x: distances,
+                y: winds,
+                type: 'scatter',
+                mode: 'lines',
+                name: 'Ветер (м/с)',
+                line: { color: '#667eea', width: 2 },
+                yaxis: 'y2'
+            };
+
+            const traceTemp = {
+                x: distances,
+                y: temps,
+                type: 'scatter',
+                mode: 'lines',
+                name: 'Температура (°C)',
+                line: { color: '#ed8936', width: 2 },
+                yaxis: 'y3'
+            };
+
+            const tracePrecip = {
+                x: distances,
+                y: precip,
+                type: 'scatter',
+                mode: 'lines',
+                name: 'Осадки (мм/ч)',
+                line: { color: '#3182ce', width: 2 },
+                yaxis: 'y4'
+            };
+
+            const traceVisibility = {
+                x: distances,
+                y: visibility,
+                type: 'scatter',
+                mode: 'lines',
+                name: 'Видимость (км)',
+                line: { color: '#38a169', width: 2 },
+                yaxis: 'y5'
+            };
+
+            const layout = {
+                title: 'Профиль метеоусловий по маршруту',
+                grid: { rows: 1, columns: 1, pattern: 'independent' },
+                xaxis: { title: 'Дистанция (км)' },
+                yaxis: {
+                    title: 'Риск',
+                    range: [0, 3.5],
+                    tickvals: [1, 2, 3],
+                    ticktext: ['Низкий', 'Средний', 'Высокий'],
+                    side: 'left'
+                },
+                yaxis2: {
+                    title: 'Ветер (м/с)',
+                    overlaying: 'y',
+                    side: 'right',
+                    position: 0.80
+                },
+                yaxis3: {
+                    title: 'Температура (°C)',
+                    overlaying: 'y',
+                    side: 'right',
+                    position: 0.87
+                },
+                yaxis4: {
+                    title: 'Осадки (мм/ч)',
+                    overlaying: 'y',
+                    side: 'right',
+                    position: 0.94
+                },
+                yaxis5: {
+                    title: 'Видимость (км)',
+                    overlaying: 'y',
+                    side: 'right',
+                    position: 1
+                },
+                showlegend: true,
+                legend: { x: 0, y: 1, orientation: 'h' },
+                margin: { t: 40, b: 40, l: 50, r: 50 },
+                paper_bgcolor: 'rgba(0,0,0,0.02)',
+                plot_bgcolor: 'rgba(0,0,0,0.02)'
+            };
+
+            Plotly.newPlot('chartContainer', [traceRisk, traceWind, traceTemp, tracePrecip, traceVisibility], layout, { responsive: true, displayModeBar: false });
+        }
+
+        // ==================== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ====================
+        function calculateDistance(point1, point2) {
+            const R = 6371;
+            const dLat = (point2.lat - point1.lat) * Math.PI / 180;
+            const dLon = (point2.lon - point1.lon) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(point1.lat * Math.PI / 180) * Math.cos(point2.lat * Math.PI / 180) *
+                      Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        }
+
+        function getRiskColor(risk) {
+            const colors = {
+                high: 'rgba(229, 62, 62, 0.9)',
+                medium: 'rgba(237, 137, 54, 0.9)',
+                low: 'rgba(56, 161, 105, 0.9)'
+            };
+            return colors[risk];
+        }
+
+        function getLayerValue(seg, layer) {
+            switch(layer) {
+                case 'wind': return parseFloat(seg.weather.wind10m);
+                case 'temp': return seg.weather.temp2m;
+                case 'precip': return seg.weather.precip;
+                case 'turbulence': return seg.heightAnalysis.reduce((sum, h) => sum + parseFloat(h.turbulence), 0) / seg.heightAnalysis.length;
+                case 'visibility': return seg.weather.visibility;
+                default: return seg.riskScore;
+            }
+        }
+
+        function getLayerRisk(value, layer) {
+            switch(layer) {
+                case 'wind':
+                    return value > 15 ? 'high' : value > 10 ? 'medium' : 'low';
+                case 'temp':
+                    return value < 0 || value > 30 ? 'high' : value > 20 ? 'medium' : 'low';
+                case 'precip':
+                    return value > 5 ? 'high' : value > 1 ? 'medium' : 'low';
+                case 'turbulence':
+                    return value > 6 ? 'high' : value > 3 ? 'medium' : 'low';
+                case 'visibility':
+                    return value < 5 ? 'high' : value < 10 ? 'medium' : 'low';
+                default:
+                    return value > 2 ? 'high' : value > 1 ? 'medium' : 'low';
+            }
+        }
+
+        function getLayerColor(value, layer) {
+            switch(layer) {
+                case 'wind':
+                    return {
+                        low: 'rgba(56, 161, 105, 0.9)',
+                        medium: 'rgba(237, 137, 54, 0.9)',
+                        high: 'rgba(229, 62, 62, 0.9)'
+                    };
+                case 'temp':
+                    if (value < 0) return { low: 'rgba(49, 130, 206, 0.9)', medium: 'rgba(49, 130, 206, 0.9)', high: 'rgba(49, 130, 206, 0.9)' };
+                    if (value > 30) return { low: 'rgba(229, 62, 62, 0.9)', medium: 'rgba(237, 137, 54, 0.9)', high: 'rgba(229, 62, 62, 0.9)' };
+                    return { low: 'rgba(56, 161, 105, 0.9)', medium: 'rgba(237, 137, 54, 0.9)', high: 'rgba(229, 62, 62, 0.9)' };
+                case 'precip':
+                    return {
+                        low: 'rgba(56, 161, 105, 0.9)',
+                        medium: 'rgba(237, 137, 54, 0.9)',
+                        high: 'rgba(229, 62, 62, 0.9)'
+                    };
+                case 'turbulence':
+                case 'visibility':
+                case 'risk':
+                default:
+                    return {
+                        low: 'rgba(56, 161, 105, 0.9)',
+                        medium: 'rgba(237, 137, 54, 0.9)',
+                        high: 'rgba(229, 62, 62, 0.9)'
+                    };
+            }
+        }
+
+        function showSegmentPopup(coords, seg) {
+            const riskConfig = {
+                high: { text: 'ВЫСОКИЙ', color: '#e53e3e', icon: 'fa-times-circle' },
+                medium: { text: 'СРЕДНИЙ', color: '#ed8936', icon: 'fa-exclamation-triangle' },
+                low: { text: 'НИЗКИЙ', color: '#38a169', icon: 'fa-check-circle' }
+            };
+
+            // Определяем риск для текущего слоя
+            const layerValue = seg.layerValue !== undefined ? seg.layerValue : getLayerValue(seg, currentLayer);
+            const layerRisk = getLayerRisk(layerValue, currentLayer);
+            const config = riskConfig[layerRisk];
+            
+            const riskFactors = seg.riskFactors || getRiskFactors(seg.heightAnalysis, seg.weather);
+
+            // Название текущего слоя
+            const layerNames = {
+                risk: 'Интегральный риск',
+                wind: 'Ветер',
+                temp: 'Температура',
+                precip: 'Осадки',
+                turbulence: 'Турбулентность',
+                visibility: 'Видимость'
+            };
+            const layerUnits = {
+                risk: '',
+                wind: ' м/с',
+                temp: '°C',
+                precip: ' мм/ч',
+                turbulence: '',
+                visibility: ' км'
+            };
+
+            // Таблица по высотам
+            const heightTable = seg.heightAnalysis.map(h => {
+                const hRisk = h.wind > 15 || h.turbulence > 6 || h.icingRisk ? 'high' : h.wind > 12 || h.turbulence > 4 ? 'medium' : 'low';
+                const hConfig = riskConfig[hRisk];
+                return `
+                    <tr style="border-bottom: 1px solid rgba(0,0,0,0.05);">
+                        <td style="padding: 6px 4px; font-weight: 600; color: #2d3748;">${h.height}м</td>
+                        <td style="padding: 6px 4px; color: ${hConfig.color};">
+                            <i class="fas ${hConfig.icon}"></i>
+                        </td>
+                        <td style="padding: 6px 4px; font-size: 10px;">${h.wind} м/с</td>
+                        <td style="padding: 6px 4px; font-size: 10px;">${h.temp}°C</td>
+                        <td style="padding: 6px 4px; font-size: 10px;">${h.pressure} мм</td>
+                        <td style="padding: 6px 4px; font-size: 10px;">${h.turbulence}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            const popupElement = document.getElementById('popup');
+            popupElement.innerHTML = `
+                <div class="popup-title" style="color: ${config.color}; margin-bottom: 10px;">
+                    <i class="fas ${config.icon}"></i> ${layerNames[currentLayer]}: ${layerValue.toFixed(1)}${layerUnits[currentLayer]}
+                </div>
+                
+                <div style="margin-bottom: 10px;">
+                    <div style="font-size: 10px; color: rgba(0,0,0,0.6); margin-bottom: 4px;">📍 Координаты:</div>
+                    <div style="font-family: monospace; color: #667eea; font-size: 11px;">
+                        ${seg.point.lat.toFixed(5)}, ${seg.point.lon.toFixed(5)}
+                    </div>
+                    <div style="font-size: 10px; color: rgba(0,0,0,0.6); margin-top: 4px;">📏 Дистанция: ${seg.distance.toFixed(1)} км от старта</div>
+                </div>
+                
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 10px;">
+                    <div style="font-size: 11px;">
+                        <span style="color: rgba(0,0,0,0.6);">🌡️ Температура:</span>
+                        <span style="font-weight: 600;">${seg.weather.temp2m.toFixed(1)}°C</span>
+                    </div>
+                    <div style="font-size: 11px;">
+                        <span style="color: rgba(0,0,0,0.6);">💨 Ветер:</span>
+                        <span style="font-weight: 600;">${seg.weather.wind10m.toFixed(1)} м/с</span>
+                    </div>
+                    <div style="font-size: 11px;">
+                        <span style="color: rgba(0,0,0,0.6);">🌧️ Осадки:</span>
+                        <span style="font-weight: 600;">${seg.weather.precip.toFixed(1)} мм/ч</span>
+                    </div>
+                    <div style="font-size: 11px;">
+                        <span style="color: rgba(0,0,0,0.6);">👁️ Видимость:</span>
+                        <span style="font-weight: 600;">${seg.weather.visibility.toFixed(1)} км</span>
+                    </div>
+                    <div style="font-size: 11px;">
+                        <span style="color: rgba(0,0,0,0.6);">💧 Влажность:</span>
+                        <span style="font-weight: 600;">${seg.weather.rh.toFixed(0)}%</span>
+                    </div>
+                    <div style="font-size: 11px;">
+                        <span style="color: rgba(0,0,0,0.6);">☁️ Облачность:</span>
+                        <span style="font-weight: 600;">${seg.weather.cloudCover.toFixed(0)}%</span>
+                    </div>
+                </div>
+                
+                ${riskFactors.length > 0 ? `
+                <div style="margin-bottom: 10px; padding: 8px; background: rgba(229, 62, 62, 0.1); border-radius: 6px; border-left: 3px solid ${config.color};">
+                    <div style="font-size: 10px; color: rgba(0,0,0,0.6); margin-bottom: 4px;">⚠️ Факторы риска:</div>
+                    <div style="font-size: 11px; color: ${config.color};">${riskFactors.join('; ')}</div>
+                </div>
+                ` : ''}
+                
+                <div style="margin-bottom: 8px;">
+                    <div style="font-size: 10px; color: rgba(0,0,0,0.6); margin-bottom: 4px;">📊 Анализ по высотам:</div>
+                    <table style="width: 100%; font-size: 10px; border-collapse: collapse;">
+                        <thead>
+                            <tr style="background: rgba(0,0,0,0.05);">
+                                <th style="padding: 4px; text-align: left;">Выс</th>
+                                <th style="padding: 4px;">Риск</th>
+                                <th style="padding: 4px;">Ветер</th>
+                                <th style="padding: 4px;">T°C</th>
+                                <th style="padding: 4px;">Давл</th>
+                                <th style="padding: 4px;">Турб</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${heightTable}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+
+            popupOverlay.setPosition(coords);
+        }
+
+        function changeWeatherLayer() {
+            currentLayer = document.getElementById('weatherLayerSelect').value;
+
+            const legends = {
+                risk: `
+                    <div class="legend-item"><div class="legend-color" style="background: #38a169;"></div><span>Низкий риск (≤10 м/с)</span></div>
+                    <div class="legend-item"><div class="legend-color" style="background: #ed8936;"></div><span>Средний риск (10-15 м/с)</span></div>
+                    <div class="legend-item"><div class="legend-color" style="background: #e53e3e;"></div><span>Высокий риск (>15 м/с)</span></div>
+                `,
+                wind: `
+                    <div class="legend-item"><div class="legend-color" style="background: #38a169;"></div><span>Слабый (<5 м/с)</span></div>
+                    <div class="legend-item"><div class="legend-color" style="background: #48bb78;"></div><span>Умеренный (5-10 м/с)</span></div>
+                    <div class="legend-item"><div class="legend-color" style="background: #ed8936;"></div><span>Сильный (10-15 м/с)</span></div>
+                    <div class="legend-item"><div class="legend-color" style="background: #e53e3e;"></div><span>Опасный (>15 м/с)</span></div>
+                `,
+                temp: `
+                    <div class="legend-item"><div class="legend-color" style="background: #3182ce;"></div><span>Холодно (<0°C)</span></div>
+                    <div class="legend-item"><div class="legend-color" style="background: #38a169;"></div><span>Комфортно (0-20°C)</span></div>
+                    <div class="legend-item"><div class="legend-color" style="background: #ed8936;"></div><span>Тепло (20-30°C)</span></div>
+                    <div class="legend-item"><div class="legend-color" style="background: #e53e3e;"></div><span>Жарко (>30°C)</span></div>
+                `,
+                precip: `
+                    <div class="legend-item"><div class="legend-color" style="background: #38a169;"></div><span>Без осадков</span></div>
+                    <div class="legend-item"><div class="legend-color" style="background: #48bb78;"></div><span>Слабые (<1 мм/ч)</span></div>
+                    <div class="legend-item"><div class="legend-color" style="background: #ed8936;"></div><span>Умеренные (1-5 мм/ч)</span></div>
+                    <div class="legend-item"><div class="legend-color" style="background: #e53e3e;"></div><span>Сильные (>5 мм/ч)</span></div>
+                `,
+                turbulence: `
+                    <div class="legend-item"><div class="legend-color" style="background: #38a169;"></div><span>Слабая (0-3)</span></div>
+                    <div class="legend-item"><div class="legend-color" style="background: #ed8936;"></div><span>Умеренная (3-6)</span></div>
+                    <div class="legend-item"><div class="legend-color" style="background: #e53e3e;"></div><span>Сильная (>6)</span></div>
+                `,
+                visibility: `
+                    <div class="legend-item"><div class="legend-color" style="background: #38a169;"></div><span>Хорошая (>10 км)</span></div>
+                    <div class="legend-item"><div class="legend-color" style="background: #ed8936;"></div><span>Средняя (5-10 км)</span></div>
+                    <div class="legend-item"><div class="legend-color" style="background: #e53e3e;"></div><span>Плохая (<5 км)</span></div>
+                `
+            };
+
+            document.getElementById('layerLegend').innerHTML = legends[currentLayer] || legends.risk;
+
+            if (routeSegments.length > 0) {
+                drawWeatherVisualization();
+                drawInterpolationGrid();
+                showToast(`Слой изменён: ${currentLayer}`, 'info');
+            }
+        }
+
+        function showTab(tabName) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+
+            if (tabName === 'profile') drawProfileChart();
+            // Можно добавить другие типы графиков
+        }
+
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            const toastMessage = document.getElementById('toastMessage');
+            const icon = toast.querySelector('i');
+
+            icon.className = `fas ${type === 'success' ? 'fa-check-circle' : type === 'error' ? 'fa-times-circle' : 'fa-info-circle'}`;
+            toastMessage.textContent = message;
+
+            toast.classList.add('show');
+            setTimeout(() => toast.classList.remove('show'), 3000);
+        }
+
+        // ==================== ЗАПУСК ====================
+        document.addEventListener('DOMContentLoaded', function() {
+            initMap();
+        });
+    </script>
+</body>
+</html>
