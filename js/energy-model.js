@@ -562,11 +562,11 @@ const EnergyModule = {
         const uavProfile = this.getUAVProfile();
         const segments = RouteModule.createSegments(route);
         const optimalSegments = [];
-        
+
         for (const segment of segments) {
             let bestAltitude = altitudes[0];
             let bestEnergy = Infinity;
-            
+
             for (const alt of altitudes) {
                 const meteo = this.interpolateForAltitude(forecast, alt);
                 const windComponents = this.getWindComponents(
@@ -590,15 +590,193 @@ const EnergyModule = {
                     bestAltitude = alt;
                 }
             }
-            
+
             optimalSegments.push({
                 segment: segment,
                 optimalAltitude: bestAltitude,
                 energy: bestEnergy
             });
         }
-        
+
         return optimalSegments;
+    },
+
+    /**
+     * Расчёт дополнительного расстояния с учётом возврата (туда-обратно)
+     * Показывает, сколько ещё можно пролететь км от текущей точки маршрута
+     * с обязательным возвратом к точке старта
+     */
+    async calculateAdditionalRange(route, forecast) {
+        const uavProfile = this.getUAVProfile();
+        const battery = this.getAvailableEnergy(uavProfile);
+
+        // Сначала считаем энергию для основного маршрута туда-обратно
+        const mainTripEnergy = await this.calculateRoundTripEnergy(route, forecast);
+        const mainEnergyUsed = mainTripEnergy.summary.totalEnergy;
+
+        // Доступная энергия с резервом
+        const usableEnergy = battery.withReserve;
+
+        // Оставшаяся энергия после основного маршрута
+        const remainingEnergy = usableEnergy - mainEnergyUsed;
+
+        // Если энергии нет или она отрицательная — дополнительный полёт невозможен
+        if (remainingEnergy <= 0) {
+            return {
+                canExtend: false,
+                additionalDistance: 0,
+                additionalFlightTime: 0,
+                energyRemaining: 0,
+                status: {
+                    level: 'forbidden',
+                    label: 'НЕТ РЕЗЕРВА',
+                    color: '#e53e3e',
+                    icon: 'fa-battery-empty',
+                    message: 'Энергия полностью расходуется на основной маршрут'
+                },
+                mainRouteEnergy: mainEnergyUsed,
+                batteryTotal: battery.total,
+                batteryUsable: battery.usable,
+                batteryWithReserve: battery.withReserve
+            };
+        }
+
+        // Средняя путевая скорость и мощность основного маршрута
+        const avgGroundSpeed = mainTripEnergy.summary.avgGroundSpeed;
+        const avgPower = mainEnergyUsed / (mainTripEnergy.summary.totalTime / 60);
+
+        // Время полёта на оставшейся энергии (туда-обратно, значит делим пополам)
+        const additionalTimeHours = remainingEnergy / avgPower;
+        const additionalTimeOneWay = additionalTimeHours / 2;
+
+        // Дополнительное расстояние (только в одну сторону от конечной точки)
+        const additionalDistance = avgGroundSpeed * additionalTimeOneWay;
+
+        // Общее время дополнительного полёта
+        const additionalFlightTime = additionalTimeOneWay * 60 * 2;
+
+        // Процент дополнительного расстояния от основного
+        const mainDistance = mainTripEnergy.outbound.totalDistance;
+        const additionalPercent = (additionalDistance / mainDistance) * 100;
+
+        // Статус
+        let status;
+        if (additionalDistance < 1) {
+            status = {
+                level: 'caution',
+                label: 'МИНИМАЛЬНЫЙ РЕЗЕРВ',
+                color: '#d69e2e',
+                icon: 'fa-battery-quarter',
+                message: 'Резерва хватит менее чем на 1 км'
+            };
+        } else if (additionalPercent < 20) {
+            status = {
+                level: 'info',
+                label: 'МАЛЫЙ РЕЗЕРВ',
+                color: '#4299e1',
+                icon: 'fa-battery-half',
+                message: `Резерв: +${additionalDistance.toFixed(1)} км`
+            };
+        } else if (additionalPercent < 50) {
+            status = {
+                level: 'success',
+                label: 'СРЕДНИЙ РЕЗЕРВ',
+                color: '#48bb78',
+                icon: 'fa-battery-three-quarters',
+                message: `Резерв: +${additionalDistance.toFixed(1)} км (${additionalPercent.toFixed(0)}%)`
+            };
+        } else {
+            status = {
+                level: 'excellent',
+                label: 'БОЛЬШОЙ РЕЗЕРВ',
+                color: '#38a169',
+                icon: 'fa-battery-full',
+                message: `Резерв: +${additionalDistance.toFixed(1)} км (${additionalPercent.toFixed(0)}%)`
+            };
+        }
+
+        return {
+            canExtend: true,
+            additionalDistance: additionalDistance,
+            additionalFlightTime: additionalFlightTime,
+            additionalTimeOneWay: additionalTimeOneWay * 60,
+            energyRemaining: remainingEnergy,
+            energyPercent: (remainingEnergy / usableEnergy) * 100,
+            additionalPercent: additionalPercent,
+            status: status,
+            mainRouteEnergy: mainEnergyUsed,
+            mainRouteDistance: mainDistance,
+            batteryTotal: battery.total,
+            batteryUsable: battery.usable,
+            batteryWithReserve: battery.withReserve,
+            avgPower: avgPower,
+            avgGroundSpeed: avgGroundSpeed
+        };
+    },
+
+    /**
+     * Расчет максимального радиуса полёта от точки старта (туда-обратно)
+     * Показывает максимальное расстояние, на которое можно улететь и вернуться
+     */
+    async calculateMaxRange(forecast, bearing = 0) {
+        const uavProfile = this.getUAVProfile();
+        const battery = this.getAvailableEnergy(uavProfile);
+        const usableEnergy = battery.withReserve;
+
+        // Средние метеоусловия
+        const meteo = this.interpolateForAltitude(forecast, 350);
+        const windComponents = this.getWindComponents(
+            meteo.windSpeed,
+            meteo.windDirection,
+            bearing
+        );
+
+        // Путевая скорость туда и обратно
+        const groundSpeedOut = Math.max(15, uavProfile.cruiseSpeed - windComponents.headwind * 3.6);
+        const groundSpeedBack = Math.max(15, uavProfile.cruiseSpeed + windComponents.headwind * 3.6);
+
+        // Мощность с учётом ветра
+        const powerOut = this.calculatePower({
+            distance: 1,
+            headwind: windComponents.headwind,
+            altitude: 350
+        }, meteo, uavProfile);
+
+        const powerBack = this.calculatePower({
+            distance: 1,
+            headwind: -windComponents.headwind,
+            altitude: 350
+        }, meteo, uavProfile);
+
+        // Энергия на 1 км туда-обратно
+        const energyPerKmOut = powerOut / groundSpeedOut;
+        const energyPerKmBack = powerBack / groundSpeedBack;
+        const energyPerKmRound = energyPerKmOut + energyPerKmBack;
+
+        // Максимальный радиус
+        const maxRadius = usableEnergy / energyPerKmRound;
+
+        // Время полёта
+        const timeOut = maxRadius / groundSpeedOut * 60;
+        const timeBack = maxRadius / groundSpeedBack * 60;
+        const totalTime = timeOut + timeBack;
+
+        return {
+            maxRadius: maxRadius,
+            maxDistance: maxRadius * 2,
+            totalTime: totalTime,
+            timeOut: timeOut,
+            timeBack: timeBack,
+            energyPerKm: energyPerKmRound,
+            windEffect: {
+                headwind: windComponents.headwind,
+                groundSpeedOut: groundSpeedOut,
+                groundSpeedBack: groundSpeedBack,
+                isFavorable: windComponents.headwind < 0
+            },
+            meteo: meteo,
+            battery: battery
+        };
     }
 };
 

@@ -462,11 +462,53 @@ const EnergyChartsModule = {
     /**
      * Сводная карточка энергоэффективности
      */
-    renderEnergySummary(containerId, energyData) {
+    renderEnergySummary(containerId, energyData, additionalRange = null) {
         const summary = energyData.summary;
         const battery = energyData.battery;
         const status = summary.status;
-        
+
+        // Блок дополнительного расстояния
+        let additionalRangeBlock = '';
+        if (additionalRange) {
+            const rangeStatus = additionalRange.status;
+            additionalRangeBlock = `
+                <!-- Дополнительное расстояние -->
+                <div style="
+                    display: flex;
+                    align-items: center;
+                    justify-content: space-between;
+                    margin-bottom: 20px;
+                    padding: 16px;
+                    background: ${rangeStatus.color}15;
+                    border: 2px dashed ${rangeStatus.color}60;
+                    border-radius: 12px;
+                ">
+                    <div style="display: flex; align-items: center; gap: 12px; flex: 1;">
+                        <i class="fas fa-route" style="
+                            font-size: 28px;
+                            color: ${rangeStatus.color};
+                        "></i>
+                        <div style="flex: 1;">
+                            <div style="font-size: 12px; font-weight: 600; color: ${rangeStatus.color}; margin-bottom: 4px;">
+                                🛣️ Дополнительно можно пролететь
+                            </div>
+                            <div style="font-size: 11px; color: rgba(0,0,0,0.7);">
+                                ${rangeStatus.message}
+                            </div>
+                        </div>
+                    </div>
+                    <div style="text-align: right; min-width: 120px;">
+                        <div style="font-size: 28px; font-weight: 700; color: ${rangeStatus.color};">
+                            +${additionalRange.additionalDistance.toFixed(1)} <span style="font-size: 14px;">км</span>
+                        </div>
+                        <div style="font-size: 10px; color: rgba(0,0,0,0.5); margin-top: 4px;">
+                            (~${additionalRange.additionalFlightTime.toFixed(0)} мин туда-обратно)
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
         const html = `
             <div class="energy-summary-card" style="
                 background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
@@ -500,7 +542,9 @@ const EnergyChartsModule = {
                         </div>
                     </div>
                 </div>
-                
+
+                ${additionalRangeBlock}
+
                 <!-- Основные метрики -->
                 <div style="
                     display: grid;

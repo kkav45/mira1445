@@ -4020,8 +4020,15 @@ const WizardModule = {
             // Сохраняем в stepData
             this.stepData.energyAnalysis = energyData;
 
+            // Расчёт дополнительного расстояния (резерв)
+            const additionalRange = await EnergyModule.calculateAdditionalRange(
+                this.stepData.route,
+                forecast
+            );
+            this.stepData.additionalRange = additionalRange;
+
             // Рендеринг сводки
-            EnergyChartsModule.renderEnergySummary('energySummaryContainer', energyData);
+            EnergyChartsModule.renderEnergySummary('energySummaryContainer', energyData, additionalRange);
 
             // Инициализация графиков
             setTimeout(() => {
