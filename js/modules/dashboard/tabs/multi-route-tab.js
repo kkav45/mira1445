@@ -33,13 +33,13 @@ const DashboardTabsMultiRoute = {
                     <i class="fas fa-info-circle" style="font-size: 48px; margin-bottom: 16px; opacity: 0.5;"></i>
                     <p style="font-size: 16px; margin-bottom: 20px;">Загрузите маршруты и установите точки взлёта</p>
                     <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; max-width: 500px; margin: 0 auto;">
-                        <button class="action-btn" onclick="MultiRouteModule.addTakeoffPoint({lat: 55.75, lon: 37.61, name: 'База 1'})"
+                        <button class="action-btn" onclick="MultiRouteUI.showAddTakeoffModal()"
                                 style="padding: 12px; font-size: 13px;">
                             <i class="fas fa-plus"></i> Добавить точку взлёта
                         </button>
-                        <button class="action-btn" onclick="alert('Загрузка KML')"
+                        <button class="action-btn" onclick="MultiRouteUI.handleKmlUpload()"
                                 style="padding: 12px; font-size: 13px;">
-                            <i class="fas fa-upload"></i> Загрузить маршруты
+                            <i class="fas fa-upload"></i> Загрузить KML
                         </button>
                     </div>
                 </div>
