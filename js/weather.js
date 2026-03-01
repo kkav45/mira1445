@@ -221,6 +221,47 @@ const WeatherModule = {
     },
 
     /**
+     * Расчёт безопасных окон для дневного полёта
+     * Рабочее время: от рассвета + 30 мин до заката - 30 мин
+     */
+    findSafeDaylightWindows(hourly, solar, thresholds) {
+        if (!solar || !solar.sunrise || !solar.sunset) {
+            return this.findFlightWindows(hourly, thresholds); // Обычные окна
+        }
+
+        // Парсим время рассвета и заката
+        const sunriseTime = solar.sunrise.split(':');
+        const sunsetTime = solar.sunset.split(':');
+        const sunriseHour = parseInt(sunriseTime[0]);
+        const sunriseMinute = parseInt(sunriseTime[1]) + 30; // +30 минут
+        const sunsetHour = parseInt(sunsetTime[0]);
+        const sunsetMinute = parseInt(sunsetTime[1]) - 30; // -30 минут
+
+        // Нормализация времени
+        const daylightStartHour = sunriseMinute >= 60 ? sunriseHour + 1 : sunriseHour;
+        const daylightStartMinute = sunriseMinute >= 60 ? sunriseMinute - 60 : sunriseMinute;
+        const daylightEndHour = sunsetMinute < 0 ? sunsetHour - 1 : sunsetHour;
+        const daylightEndMinute = sunsetMinute < 0 ? sunsetMinute + 60 : sunsetMinute;
+
+        Utils.log(`🌅 Дневное окно: ${daylightStartHour}:${String(daylightStartMinute).padStart(2, '0')} - ${daylightEndHour}:${String(daylightEndMinute).padStart(2, '0')}`);
+
+        // Фильтрация почасовых данных по дневному времени
+        const daylightHours = hourly.filter(h => {
+            const hourTime = new Date(h.time);
+            const hour = hourTime.getHours();
+            const minute = hourTime.getMinutes();
+            const timeInMinutes = hour * 60 + minute;
+            const startInMinutes = daylightStartHour * 60 + daylightStartMinute;
+            const endInMinutes = daylightEndHour * 60 + daylightEndMinute;
+
+            return timeInMinutes >= startInMinutes && timeInMinutes <= endInMinutes;
+        });
+
+        // Поиск безопасных окон в дневное время
+        return this.findFlightWindows(daylightHours, thresholds, true);
+    },
+
+    /**
      * Получение прогноза погоды (ОБНОВЛЕНО с ML)
      */
     async getForecast(lat, lon, date = null) {
@@ -415,7 +456,7 @@ const WeatherModule = {
             hourly: analyzed,
             daily: forecast.daily,
             current: forecast.current_weather,
-            summary: this.generateSummary(analyzed, thresholds),
+            summary: this.generateSummary(analyzed, thresholds, solar),
             trends: trends,
             verticalProfile: verticalProfile,
             solar: solar  // ✅ Добавляем солнечные условия
@@ -680,30 +721,40 @@ const WeatherModule = {
     /**
      * Генерация сводки
      */
-    generateSummary(hourly, thresholds) {
+    generateSummary(hourly, thresholds, solar = null) {
         const validHours = hourly.filter(h => h.riskScore < 3);
-        const flightWindows = this.findFlightWindows(hourly, thresholds);
-        
-        const avgTemp = hourly.reduce((sum, h) => sum + h.temp2m, 0) / hourly.length;
-        const avgWind = hourly.reduce((sum, h) => sum + h.wind10m, 0) / hourly.length;
-        const maxWind = Math.max(...hourly.map(h => h.wind10m));
-        const totalPrecip = hourly.reduce((sum, h) => sum + h.precip, 0);
+
+        // Если есть солнечные данные, используем дневные окна
+        const flightWindows = solar
+            ? this.findSafeDaylightWindows(hourly, solar, thresholds)
+            : this.findFlightWindows(hourly, thresholds);
+
+        const avgTemp = Math.round(hourly.reduce((sum, h) => sum + h.temp2m, 0) / hourly.length * 10) / 10;
+        const avgWind = Math.round(hourly.reduce((sum, h) => sum + h.wind10m, 0) / hourly.length * 10) / 10;
+        const maxWind = Math.round(Math.max(...hourly.map(h => h.wind10m)) * 10) / 10;
+        const totalPrecip = Math.round(hourly.reduce((sum, h) => sum + h.precip, 0) * 10) / 10;
 
         return {
             validHoursCount: validHours.length,
             flightWindows: flightWindows,
-            avgTemp: avgTemp.toFixed(1),
-            avgWind: avgWind.toFixed(1),
-            maxWind: maxWind.toFixed(1),
-            totalPrecip: totalPrecip.toFixed(1),
-            overallRisk: this.getOverallRisk(hourly)
+            avgTemp: avgTemp,
+            avgWind: avgWind,
+            maxWind: maxWind,
+            totalPrecip: totalPrecip,
+            overallRisk: this.getOverallRisk(hourly),
+            solar: solar,
+            isDaylightFlight: !!solar
         };
     },
 
     /**
      * Поиск благоприятных окон для полёта
+     * @param {Array} hourly - Почасовые данные
+     * @param {Object} thresholds - Пороги риска
+     * @param {boolean} isDaylight - Дневное окно (рассвет+30 до закат-30)
+     * @param {number} minDuration - Минимальная продолжительность (часы)
      */
-    findFlightWindows(hourly, thresholds, minDuration = 2) {
+    findFlightWindows(hourly, thresholds, isDaylight = false, minDuration = 2) {
         const windows = [];
         let currentWindow = null;
 
@@ -716,7 +767,8 @@ const WeatherModule = {
                     currentWindow = {
                         start: hour.time,
                         end: hour.time,
-                        hours: [hour]
+                        hours: [hour],
+                        isDaylight: isDaylight
                     };
                 } else {
                     currentWindow.end = hour.time;
@@ -724,7 +776,7 @@ const WeatherModule = {
                 }
             } else {
                 if (currentWindow && currentWindow.hours.length >= minDuration) {
-                    windows.push(currentWindow);
+                    windows.push(this.formatFlightWindow(currentWindow, isDaylight));
                 }
                 currentWindow = null;
             }
@@ -732,10 +784,35 @@ const WeatherModule = {
 
         // Добавляем последний окно
         if (currentWindow && currentWindow.hours.length >= minDuration) {
-            windows.push(currentWindow);
+            windows.push(this.formatFlightWindow(currentWindow, isDaylight));
         }
 
         return windows;
+    },
+
+    /**
+     * Форматирование полётного окна
+     */
+    formatFlightWindow(window, isDaylight) {
+        const start = new Date(window.start);
+        const end = new Date(window.end);
+        const duration = window.hours.length;
+
+        // Средние параметры по окну
+        const avgWind = Math.round(window.hours.reduce((sum, h) => sum + h.wind10m, 0) / window.hours.length * 10) / 10;
+        const avgTemp = Math.round(window.hours.reduce((sum, h) => sum + h.temp2m, 0) / window.hours.length * 10) / 10;
+        const avgRisk = window.hours.every(h => h.risk === 'low') ? 'low' : 'medium';
+
+        return {
+            start: start.toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit'}),
+            end: end.toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit'}),
+            duration: duration,
+            wind: avgWind,
+            temp: avgTemp,
+            risk: avgRisk,
+            isDaylight: isDaylight,
+            hours: window.hours
+        };
     },
 
     /**

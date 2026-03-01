@@ -207,9 +207,12 @@ const DashboardTabsMeteo = {
         return windows.map(w => {
             const riskClass = w.risk === 'low' ? 'allowed' : w.risk === 'medium' ? 'allowed' : 'forbidden';
             const riskLabel = w.risk === 'low' ? '🟢 Низкий' : w.risk === 'medium' ? '🟡 Средний' : '🔴 Высокий';
+            const daylightIcon = w.isDaylight ? '🌅' : '🌙';
+            const daylightText = w.isDaylight ? '(Дневное)' : '';
+
             return `
                 <div class="dashboard-flight-window ${riskClass}">
-                    <div class="dashboard-flight-window-time">${w.start || '--:--'}–${w.end || '--:--'}</div>
+                    <div class="dashboard-flight-window-time">${daylightIcon} ${w.start || '--:--'}–${w.end || '--:--'} ${daylightText}</div>
                     <div class="dashboard-flight-window-duration">${w.duration || 0} ч</div>
                     <div class="dashboard-flight-window-metrics">
                         <div class="dashboard-flight-window-metric">
