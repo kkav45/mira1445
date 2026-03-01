@@ -127,11 +127,36 @@ const MultiRouteWizardIntegration = {
         const routesListStart = html.indexOf('class="saved-routes-list"');
         if (routesListStart === -1) return html;
 
-        // Находим все saved-route-item и добавляем кнопки
+        // Находим все route-actions и добавляем контейнер для кнопки точки
         return html.replace(
             /(<div class="route-actions">.*?<\/div>)/gs,
             '$1 <div class="route-takeoff" style="margin-top: 8px;"></div>'
         );
+    },
+
+    /**
+     * Обновление кнопки точки для конкретного маршрута
+     */
+    updateRouteTakeoffButton(routeId) {
+        console.log('🔘 Обновление кнопки для маршрута:', routeId);
+
+        const route = typeof MultiRouteModule !== 'undefined' ?
+            MultiRouteModule.routes.find(r => r.id === routeId) : null;
+
+        const btnSelector = `[data-route-takeoff-btn="${routeId}"]`;
+        const btn = document.querySelector(btnSelector);
+
+        if (btn) {
+            const hasTakeoff = route?.takeoffPoint;
+            btn.innerHTML = `
+                <i class="fas ${hasTakeoff ? 'fa-check-circle' : 'fa-map-marker-alt'}" style="color: ${hasTakeoff ? 'white' : '#38a169'};"></i>
+                ${hasTakeoff ? 'Точка выбрана' : 'Выбрать точку взлёта'}
+            `;
+            btn.style.background = hasTakeoff ?
+                'linear-gradient(135deg, rgba(56, 161, 105, 0.8) 0%, rgba(38, 166, 154, 0.8) 100%)' :
+                '#f7fafc';
+            btn.style.color = hasTakeoff ? 'white' : '#4a5568';
+        }
     },
 
     /**
@@ -174,17 +199,17 @@ const MultiRouteWizardIntegration = {
         if (typeof MultiRouteModule !== 'undefined') {
             const originalAddTakeoffPoint = MultiRouteModule.addTakeoffPoint;
 
-            MultiRouteModule.addTakeoffPoint = function(point) {
-                const result = originalAddTakeoffPoint.call(this, point);
-                MultiRouteWizardIntegration.refreshTakeoffPointsList();
+            MultiRouteModule.addTakeoffPoint = (point) => {
+                const result = originalAddTakeoffPoint.call(MultiRouteModule, point);
+                this.refreshTakeoffPointsList();
                 return result;
             };
 
             const originalRemoveTakeoffPoint = MultiRouteModule.removeTakeoffPoint;
 
-            MultiRouteModule.removeTakeoffPoint = function(id) {
-                const result = originalRemoveTakeoffPoint.call(this, id);
-                MultiRouteWizardIntegration.refreshTakeoffPointsList();
+            MultiRouteModule.removeTakeoffPoint = (id) => {
+                const result = originalRemoveTakeoffPoint.call(MultiRouteModule, id);
+                this.refreshTakeoffPointsList();
                 return result;
             };
         }
@@ -192,23 +217,29 @@ const MultiRouteWizardIntegration = {
         // Перехват загрузки KML для добавления в мульти-маршрут
         const kmlInput = document.getElementById('kmlInput');
         if (kmlInput) {
-            const originalHandler = kmlInput.onchange;
+            kmlInput.addEventListener('change', async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
 
-            kmlInput.onchange = async (e) => {
-                if (originalHandler) {
-                    await originalHandler(e);
+                try {
+                    const route = await RouteModule.importKML(file);
+                    if (route) {
+                        // Добавляем в мульти-маршрут
+                        if (typeof MultiRouteModule !== 'undefined') {
+                            MultiRouteModule.addRoute(route);
+                        }
+
+                        RouteModule.saveRoute(route);
+                        showToast(`Маршрут "${route.name}" загружен`, 'success');
+
+                        // Перерисовываем шаг 1
+                        this.refreshStep1();
+                        this.updateSelectedRoutesInfo();
+                    }
+                } catch (error) {
+                    showToast('Ошибка загрузки KML: ' + error.message, 'error');
                 }
-
-                // Добавляем последний загруженный маршрут в мульти-маршрут
-                const routes = RouteModule.getSavedRoutes();
-                const lastRoute = routes[routes.length - 1];
-
-                if (lastRoute && typeof MultiRouteModule !== 'undefined') {
-                    MultiRouteModule.addRoute(lastRoute);
-                    MultiRouteWizardIntegration.updateSelectedRoutesInfo();
-                    MultiRouteWizardIntegration.addRouteTakeoffButtons();
-                }
-            };
+            });
         }
 
         // Кнопка анализа всех маршрутов
@@ -267,6 +298,16 @@ const MultiRouteWizardIntegration = {
 
             console.log('✅ Кнопки добавлены для', routeItems.length, 'маршрутов');
         }, 100);
+    },
+
+    /**
+     * Перерисовка шага 1 после изменений
+     */
+    refreshStep1() {
+        if (typeof WizardModule !== 'undefined' && WizardModule.currentStep === 1) {
+            console.log('🔄 Перерисовка шага 1');
+            WizardModule.renderStepContent();
+        }
     },
 
     /**

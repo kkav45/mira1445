@@ -257,21 +257,16 @@ const TakeoffPointSelector = {
      * Обновление UI маршрута
      */
     updateRouteTakeoffUI(routeId) {
+        console.log('🔘 Обновление UI маршрута:', routeId);
+
         if (typeof MultiRouteModule === 'undefined') return;
 
         const route = MultiRouteModule.routes.find(r => r.id === routeId);
         if (!route || !route.takeoffPoint) return;
 
-        // Обновляем кнопку в списке маршрутов
-        const btnSelector = `[data-route-takeoff-btn="${routeId}"]`;
-        const btn = document.querySelector(btnSelector);
-
-        if (btn) {
-            btn.innerHTML = `
-                <i class="fas fa-check-circle" style="color: #38a169;"></i>
-                ${route.takeoffPoint.baseName || 'Выбрана'}
-            `;
-            btn.title = `Точка взлёта: ${route.takeoffPoint.lat.toFixed(4)}, ${route.takeoffPoint.lon.toFixed(4)}`;
+        // Обновляем кнопку маршрута
+        if (typeof MultiRouteWizardIntegration !== 'undefined') {
+            MultiRouteWizardIntegration.updateRouteTakeoffButton(routeId);
         }
 
         // Перерисовываем список точек взлёта
