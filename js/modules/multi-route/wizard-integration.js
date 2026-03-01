@@ -9,6 +9,15 @@ const MultiRouteWizardIntegration = {
      * Инициализация интеграции
      */
     init() {
+        console.log('🔍 MultiRouteWizardIntegration.init() вызван');
+        
+        // Ждём пока WizardModule будет определён
+        if (typeof WizardModule === 'undefined') {
+            console.warn('⚠️ WizardModule ещё не определён, ждём...');
+            setTimeout(() => this.init(), 100);
+            return;
+        }
+        
         this.bindToWizard();
         console.log('✅ MultiRouteWizardIntegration инициализирован');
     },
@@ -40,6 +49,9 @@ const MultiRouteWizardIntegration = {
      * Улучшение HTML шага 1
      */
     enhanceStep1Html(html) {
+        console.log('🔧 enhanceStep1Html() вызван');
+        console.log('HTML length:', html.length);
+
         // Добавляем блок точек взлёта после даты и времени
         const takeoffBlock = `
             <!-- Точки взлёта для мульти-маршрута -->
@@ -62,17 +74,29 @@ const MultiRouteWizardIntegration = {
         `;
 
         // Вставляем после закрывающего тега datetime-selector
-        // Ищем "</div>" после datetime-selector и перед "<!-- Выбор маршрута -->"
         const datetimeSelectorEnd = html.indexOf('class="datetime-selector"');
-        if (datetimeSelectorEnd === -1) return html;
+        console.log('datetimeSelectorEnd:', datetimeSelectorEnd);
+        
+        if (datetimeSelectorEnd === -1) {
+            console.warn('⚠️ Не найден datetime-selector в HTML');
+            return html;
+        }
 
         // Находим закрывающий </div> для datetime-selector
         const closeDivAfter = html.indexOf('</div>', datetimeSelectorEnd);
-        if (closeDivAfter === -1) return html;
+        console.log('closeDivAfter:', closeDivAfter);
+        
+        if (closeDivAfter === -1) {
+            console.warn('⚠️ Не найден закрывающий </div>');
+            return html;
+        }
 
         // Вставляем после закрывающего </div>
         const insertPosition = closeDivAfter + 6; // длина '</div>'
-        return html.slice(0, insertPosition) + '\n' + takeoffBlock + html.slice(insertPosition);
+        const newHtml = html.slice(0, insertPosition) + '\n' + takeoffBlock + html.slice(insertPosition);
+        
+        console.log('✅ Блок точек взлёта добавлен');
+        return newHtml;
     },
 
     /**
