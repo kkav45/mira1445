@@ -74,6 +74,14 @@ const WeatherModule = {
     },
 
     /**
+     * Конвертация давления: гПа → мм рт. ст.
+     * 1 гПа = 0.750062 мм рт. ст.
+     */
+    hPaToMmHg(hPa) {
+        return Math.round(hPa * 0.750062);
+    },
+
+    /**
      * Получить исторические данные за месяц (НОВОЕ)
      */
     async getHistoricalMonth(lat, lon, year, month) {
@@ -366,19 +374,19 @@ const WeatherModule = {
         for (let i = 0; i < hourly.time.length; i++) {
             const hour = {
                 time: hourly.time[i],
-                temp2m: hourly.temperature_2m?.[i] || 0,           // °C
-                humidity: hourly.relative_humidity_2m?.[i] || 0,   // %
-                dewPoint: hourly.dew_point_2m?.[i] || 0,           // °C
-                wind10m: hourly.wind_speed_10m?.[i] || 0,          // м/с
-                windDir: hourly.wind_direction_10m?.[i] || 0,      // °
-                windGust: hourly.wind_gusts_10m?.[i] || 0,         // м/с
-                precip: hourly.precipitation?.[i] || 0,            // мм
-                rain: hourly.rain?.[i] || 0,                       // мм
-                snow: hourly.snowfall?.[i] || 0,                   // мм
-                cloudCover: hourly.cloud_cover?.[i] || 0,          // %
-                cloudCoverLow: hourly.cloud_cover_low?.[i] || 0,   // %
-                pressure: hourly.pressure_msl?.[i] || 0,           // гПа
-                visibility: hourly.visibility?.[i] || 10,          // км (API возвращает км)
+                temp2m: Math.round(hourly.temperature_2m?.[i] || 0),           // °C (округлено)
+                humidity: Math.round(hourly.relative_humidity_2m?.[i] || 0),   // % (округлено)
+                dewPoint: Math.round(hourly.dew_point_2m?.[i] || 0),           // °C (округлено)
+                wind10m: Math.round(hourly.wind_speed_10m?.[i] || 0),          // м/с (округлено)
+                windDir: Math.round(hourly.wind_direction_10m?.[i] || 0),      // ° (округлено)
+                windGust: Math.round(hourly.wind_gusts_10m?.[i] || 0),         // м/с (округлено)
+                precip: Math.round((hourly.precipitation?.[i] || 0) * 10) / 10, // мм (округлено до 0.1)
+                rain: Math.round((hourly.rain?.[i] || 0) * 10) / 10,           // мм (округлено до 0.1)
+                snow: Math.round(hourly.snowfall?.[i] || 0),                   // мм (округлено)
+                cloudCover: Math.round(hourly.cloud_cover?.[i] || 0),          // % (округлено)
+                cloudCoverLow: Math.round(hourly.cloud_cover_low?.[i] || 0),   // % (округлено)
+                pressure: this.hPaToMmHg(hourly.pressure_msl?.[i] || 0),       // мм рт. ст. (конвертация + округлено)
+                visibility: Math.round(hourly.visibility?.[i] || 10),          // км (округлено)
                 weatherCode: hourly.weather_code?.[i] || 0
             };
 

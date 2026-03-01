@@ -246,6 +246,7 @@ const DashboardTabsMeteo = {
             const windDir = h.windDir || h.wind_direction_10m || 0;
             const precip = h.precip || h.precipitation || 0;
             const humidity = h.humidity || h.relative_humidity_2m || 0;
+            const pressure = h.pressure || 0;  // мм рт. ст.
 
             return `
                 <tr>
@@ -257,6 +258,7 @@ const DashboardTabsMeteo = {
                     <td>${precip} мм/ч</td>
                     <td>${h.visibility || '>5'} км</td>
                     <td>${humidity}%</td>
+                    <td>${pressure} мм рт. ст.</td>
                 </tr>
             `;
         }).join('');
@@ -273,6 +275,7 @@ const DashboardTabsMeteo = {
                         <th>Осадки</th>
                         <th>Видимость</th>
                         <th>Влажность</th>
+                        <th>Давление</th>
                     </tr>
                 </thead>
                 <tbody>${rows}</tbody>
