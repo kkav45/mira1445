@@ -61,11 +61,18 @@ const MultiRouteWizardIntegration = {
             <div style="margin: 20px 0; border-top: 1px solid rgba(0,0,0,0.1);"></div>
         `;
 
-        // Вставляем после datetime-selector
-        return html.replace(
-            '(</div>\\s*<!-- Выбор маршрута -->)',
-            takeoffBlock + '$1'
-        );
+        // Вставляем после закрывающего тега datetime-selector
+        // Ищем "</div>" после datetime-selector и перед "<!-- Выбор маршрута -->"
+        const datetimeSelectorEnd = html.indexOf('class="datetime-selector"');
+        if (datetimeSelectorEnd === -1) return html;
+
+        // Находим закрывающий </div> для datetime-selector
+        const closeDivAfter = html.indexOf('</div>', datetimeSelectorEnd);
+        if (closeDivAfter === -1) return html;
+
+        // Вставляем после закрывающего </div>
+        const insertPosition = closeDivAfter + 6; // длина '</div>'
+        return html.slice(0, insertPosition) + '\n' + takeoffBlock + html.slice(insertPosition);
     },
 
     /**
