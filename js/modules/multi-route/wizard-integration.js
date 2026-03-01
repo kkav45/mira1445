@@ -62,23 +62,31 @@ const MultiRouteWizardIntegration = {
      */
     enhanceStep1Html(html) {
         console.log('🔧 enhanceStep1Html() вызван');
-        console.log('HTML length:', html.length);
 
-        // Добавляем блок точек взлёта после даты и времени
+        // 1. Сначала добавляем кнопки выбора точки для каждого маршрута
+        html = this.enhanceRouteList(html);
+
+        // 2. Затем добавляем блок общих точек взлёта
         const takeoffBlock = `
             <!-- Точки взлёта для мульти-маршрута -->
             <div class="section-title" style="margin-bottom: 10px;">
-                <i class="fas fa-helicopter"></i> Точки взлёта
+                <i class="fas fa-helicopter"></i> Общие точки взлёта
             </div>
 
             <div id="takeoffPointsBlock" style="margin-bottom: 20px;">
                 <div id="takeoffPointsList">
                     ${this.renderTakeoffPointsList()}
                 </div>
-                <button class="action-btn" onclick="MultiRouteUI.showAddTakeoffModal()"
-                        style="margin-top: 10px; width: 100%;">
-                    <i class="fas fa-plus"></i> Добавить точку взлёта
-                </button>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
+                    <button class="action-btn" onclick="MultiRouteUI.showAddTakeoffModal()"
+                            style="padding: 10px; font-size: 12px;">
+                        <i class="fas fa-plus"></i> Добавить точку
+                    </button>
+                    <button class="action-btn" onclick="TakeoffPointSelector.startSelection('map')"
+                            style="padding: 10px; font-size: 12px; background: linear-gradient(135deg, rgba(102, 126, 234, 0.8) 0%, rgba(118, 75, 162, 0.8) 100%);">
+                        <i class="fas fa-map-marker-alt"></i> Выбрать на карте
+                    </button>
+                </div>
             </div>
 
             <!-- Разделитель -->
@@ -104,11 +112,26 @@ const MultiRouteWizardIntegration = {
         }
 
         // Вставляем после закрывающего </div>
-        const insertPosition = closeDivAfter + 6; // длина '</div>'
+        const insertPosition = closeDivAfter + 6;
         const newHtml = html.slice(0, insertPosition) + '\n' + takeoffBlock + html.slice(insertPosition);
         
         console.log('✅ Блок точек взлёта добавлен');
         return newHtml;
+    },
+
+    /**
+     * Улучшение списка маршрутов (добавление кнопок выбора точки)
+     */
+    enhanceRouteList(html) {
+        // Ищем saved-routes-list и добавляем кнопки для каждого маршрута
+        const routesListStart = html.indexOf('class="saved-routes-list"');
+        if (routesListStart === -1) return html;
+
+        // Находим все saved-route-item и добавляем кнопки
+        return html.replace(
+            /(<div class="route-actions">.*?<\/div>)/gs,
+            '$1 <div class="route-takeoff" style="margin-top: 8px;"></div>'
+        );
     },
 
     /**
@@ -142,6 +165,11 @@ const MultiRouteWizardIntegration = {
      * События шага 1
      */
     bindStep1Events() {
+        console.log('🔗 bindStep1Events() вызван');
+
+        // Добавляем кнопки выбора точки для каждого маршрута
+        this.addRouteTakeoffButtons();
+
         // Обновляем список точек взлёта при изменении
         if (typeof MultiRouteModule !== 'undefined') {
             const originalAddTakeoffPoint = MultiRouteModule.addTakeoffPoint;
@@ -178,6 +206,7 @@ const MultiRouteWizardIntegration = {
                 if (lastRoute && typeof MultiRouteModule !== 'undefined') {
                     MultiRouteModule.addRoute(lastRoute);
                     MultiRouteWizardIntegration.updateSelectedRoutesInfo();
+                    MultiRouteWizardIntegration.addRouteTakeoffButtons();
                 }
             };
         }
@@ -196,6 +225,48 @@ const MultiRouteWizardIntegration = {
                 await MultiRouteWizardIntegration.analyzeAllRoutes();
             };
         }
+    },
+
+    /**
+     * Добавление кнопок выбора точки для каждого маршрута
+     */
+    addRouteTakeoffButtons() {
+        console.log('🔘 Добавление кнопок выбора точки для маршрутов');
+
+        // Находим все элементы маршрутов и добавляем кнопки
+        setTimeout(() => {
+            const routeItems = document.querySelectorAll('.saved-route-item');
+
+            routeItems.forEach((item, index) => {
+                const routeId = item.dataset.routeId;
+                let takeoffDiv = item.querySelector('.route-takeoff');
+
+                if (!takeoffDiv) {
+                    takeoffDiv = document.createElement('div');
+                    takeoffDiv.className = 'route-takeoff';
+                    takeoffDiv.style.marginTop = '8px';
+                    item.appendChild(takeoffDiv);
+                }
+
+                // Получаем информацию о точке взлёта маршрута
+                const route = typeof MultiRouteModule !== 'undefined' ?
+                    MultiRouteModule.routes.find(r => r.id === routeId) : null;
+
+                const hasTakeoff = route?.takeoffPoint;
+
+                takeoffDiv.innerHTML = `
+                    <button class="action-btn"
+                            data-route-takeoff-btn="${routeId}"
+                            onclick="TakeoffPointSelector.startSelection('${routeId}')"
+                            style="width: 100%; padding: 8px; font-size: 11px; background: ${hasTakeoff ? 'linear-gradient(135deg, rgba(56, 161, 105, 0.8) 0%, rgba(38, 166, 154, 0.8) 100%)' : '#f7fafc'}; color: ${hasTakeoff ? 'white' : '#4a5568'}; border: 1px solid #e2e8f0; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px;">
+                        <i class="fas ${hasTakeoff ? 'fa-check-circle' : 'fa-map-marker-alt'}" style="color: ${hasTakeoff ? 'white' : '#38a169'};"></i>
+                        ${hasTakeoff ? 'Точка выбрана' : 'Выбрать точку взлёта'}
+                    </button>
+                `;
+            });
+
+            console.log('✅ Кнопки добавлены для', routeItems.length, 'маршрутов');
+        }, 100);
     },
 
     /**
