@@ -66,57 +66,9 @@ const MultiRouteWizardIntegration = {
         // 1. Сначала добавляем кнопки выбора точки для каждого маршрута
         html = this.enhanceRouteList(html);
 
-        // 2. Затем добавляем блок общих точек взлёта
-        const takeoffBlock = `
-            <!-- Точки взлёта для мульти-маршрута -->
-            <div class="section-title" style="margin-bottom: 10px;">
-                <i class="fas fa-helicopter"></i> Общие точки взлёта
-            </div>
+        // 2. Блок "Общие точки взлёта" УДАЛЁН - теперь только кнопки для каждого маршрута
 
-            <div id="takeoffPointsBlock" style="margin-bottom: 20px;">
-                <div id="takeoffPointsList">
-                    ${this.renderTakeoffPointsList()}
-                </div>
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px;">
-                    <button class="action-btn" onclick="MultiRouteUI.showAddTakeoffModal()"
-                            style="padding: 10px; font-size: 12px;">
-                        <i class="fas fa-plus"></i> Добавить точку
-                    </button>
-                    <button class="action-btn" onclick="TakeoffPointSelector.startSelection('map')"
-                            style="padding: 10px; font-size: 12px; background: linear-gradient(135deg, rgba(102, 126, 234, 0.8) 0%, rgba(118, 75, 162, 0.8) 100%);">
-                        <i class="fas fa-map-marker-alt"></i> Выбрать на карте
-                    </button>
-                </div>
-            </div>
-
-            <!-- Разделитель -->
-            <div style="margin: 20px 0; border-top: 1px solid rgba(0,0,0,0.1);"></div>
-        `;
-
-        // Вставляем после закрывающего тега datetime-selector
-        const datetimeSelectorEnd = html.indexOf('class="datetime-selector"');
-        console.log('datetimeSelectorEnd:', datetimeSelectorEnd);
-        
-        if (datetimeSelectorEnd === -1) {
-            console.warn('⚠️ Не найден datetime-selector в HTML');
-            return html;
-        }
-
-        // Находим закрывающий </div> для datetime-selector
-        const closeDivAfter = html.indexOf('</div>', datetimeSelectorEnd);
-        console.log('closeDivAfter:', closeDivAfter);
-        
-        if (closeDivAfter === -1) {
-            console.warn('⚠️ Не найден закрывающий </div>');
-            return html;
-        }
-
-        // Вставляем после закрывающего </div>
-        const insertPosition = closeDivAfter + 6;
-        const newHtml = html.slice(0, insertPosition) + '\n' + takeoffBlock + html.slice(insertPosition);
-        
-        console.log('✅ Блок точек взлёта добавлен');
-        return newHtml;
+        return html;
     },
 
     /**
@@ -214,31 +166,19 @@ const MultiRouteWizardIntegration = {
             };
         }
 
-        // Перехват загрузки KML для добавления в мульти-маршрут
+        // Перехват загрузки KML — ТОЛЬКО для перерисовки кнопок
         const kmlInput = document.getElementById('kmlInput');
         if (kmlInput) {
             kmlInput.addEventListener('change', async (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
 
-                try {
-                    const route = await RouteModule.importKML(file);
-                    if (route) {
-                        // Добавляем в мульти-маршрут
-                        if (typeof MultiRouteModule !== 'undefined') {
-                            MultiRouteModule.addRoute(route);
-                        }
-
-                        RouteModule.saveRoute(route);
-                        showToast(`Маршрут "${route.name}" загружен`, 'success');
-
-                        // Перерисовываем шаг 1
-                        this.refreshStep1();
-                        this.updateSelectedRoutesInfo();
-                    }
-                } catch (error) {
-                    showToast('Ошибка загрузки KML: ' + error.message, 'error');
-                }
+                // Ждём пока RouteModule обработает KML
+                setTimeout(() => {
+                    console.log('🔄 KML загружен, обновляем кнопки');
+                    this.addRouteTakeoffButtons();
+                    this.updateSelectedRoutesInfo();
+                }, 200);
             });
         }
 
@@ -267,6 +207,7 @@ const MultiRouteWizardIntegration = {
         // Находим все элементы маршрутов и добавляем кнопки
         setTimeout(() => {
             const routeItems = document.querySelectorAll('.saved-route-item');
+            console.log('Найдено маршрутов:', routeItems.length);
 
             routeItems.forEach((item, index) => {
                 const routeId = item.dataset.routeId;
@@ -284,6 +225,8 @@ const MultiRouteWizardIntegration = {
                     MultiRouteModule.routes.find(r => r.id === routeId) : null;
 
                 const hasTakeoff = route?.takeoffPoint;
+
+                console.log(`Маршрут ${routeId}: точка ${hasTakeoff ? 'выбрана' : 'не выбрана'}`);
 
                 takeoffDiv.innerHTML = `
                     <button class="action-btn"
