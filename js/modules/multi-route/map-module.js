@@ -183,15 +183,15 @@ const MultiRouteMapModule = {
                     radius: 6,
                     fill: new ol.style.Fill({
                         color: route.status === 'full' ? '#48bb78' :
-                               route.status === 'partial' ? '#ed8936' :
-                               route.status === 'skipped' ? '#f56565' : '#a0aec0'
+                               (route.status === 'partial' ? '#ed8936' :
+                               (route.status === 'skipped' ? '#f56565' : '#a0aec0'))
                     }),
                     stroke: new ol.style.Stroke({
                         color: '#fff',
                         width: 2
                     })
                 })
-            });
+            }));
 
             this.routesLayer.getSource().addFeature(pointFeature);
         });
