@@ -29,6 +29,11 @@ const DashboardModule = {
         this.bindEvents();
         this.updateButtonState();
         console.log('✅ DashboardModule инициализирован');
+
+        // Инициализация MultiRouteUI
+        if (typeof MultiRouteUI !== 'undefined') {
+            MultiRouteUI.init();
+        }
     },
 
     /**
