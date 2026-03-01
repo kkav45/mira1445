@@ -26,11 +26,14 @@ const MultiRouteWizardIntegration = {
      * Привязка к wizard
      */
     bindToWizard() {
+        console.log('🔗 bindToWizard() вызван');
+        
         // Перехватываем рендер шага 1
         if (typeof WizardModule !== 'undefined') {
             const originalRenderStep1Html = WizardModule.renderStep1Html;
 
             WizardModule.renderStep1Html = function() {
+                console.log('🔧 WizardModule.renderStep1Html() перехвачен');
                 const html = originalRenderStep1Html.call(this);
                 return MultiRouteWizardIntegration.enhanceStep1Html(html);
             };
@@ -39,9 +42,18 @@ const MultiRouteWizardIntegration = {
             const originalBindStep1Events = WizardModule.bindStep1Events;
 
             WizardModule.bindStep1Events = function() {
+                console.log('🔧 WizardModule.bindStep1Events() перехвачен');
                 originalBindStep1Events.call(this);
                 MultiRouteWizardIntegration.bindStep1Events();
             };
+            
+            // Принудительно перерендериваем шаг 1 если он текущий
+            if (WizardModule.currentStep === 1) {
+                console.log('🔄 Принудительный ререндер шага 1');
+                setTimeout(() => {
+                    WizardModule.renderStepContent();
+                }, 50);
+            }
         }
     },
 
