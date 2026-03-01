@@ -289,13 +289,23 @@ const DashboardTabsMeteo = {
 
         // Используем первый сегмент
         const firstSegment = segmentAnalysis.length > 0 ? segmentAnalysis[0] : null;
-        const data = firstSegment?.analyzed || weatherData;
+        const analyzed = firstSegment?.analyzed || weatherData;
 
-        if (!data || (!data.hourly && !data.timeseries)) return;
+        console.log('📈 afterRender():', {
+            firstSegment: firstSegment,
+            analyzed: analyzed,
+            hasHourly: !!analyzed?.hourly,
+            hasTimeseries: !!analyzed?.timeseries
+        });
+
+        if (!analyzed) {
+            console.warn('⚠️ No analyzed data found');
+            return;
+        }
 
         // Даём DOM время на рендер
         setTimeout(() => {
-            this.initCharts(data);
+            this.initCharts(analyzed);
         }, 100);
     },
 
