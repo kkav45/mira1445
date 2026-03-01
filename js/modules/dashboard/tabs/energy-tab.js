@@ -116,6 +116,14 @@ const DashboardTabsEnergy = {
         const reserve = Math.max(0, Math.round((1 - totalEnergy / availableEnergy) * 100));
         const status = reserve >= profile.minReserve * 100 ? 'allowed' : reserve >= 10 ? 'warning' : 'forbidden';
 
+        // Расчёт оставшегося времени и дистанции
+        const remainingEnergy = availableEnergy - totalEnergy;
+        const avgPower = segmentEnergies.length > 0 
+            ? segmentEnergies.reduce((sum, s) => sum + s.power, 0) / segmentEnergies.length 
+            : profile.basePower;
+        const remainingTime = Math.round((remainingEnergy / avgPower) * 60); // минут
+        const remainingDistance = Math.round(remainingTime / 60 * profile.cruiseSpeed); // км
+
         return {
             status,
             totalDistance: Math.round(totalDistance * 10) / 10,
@@ -123,6 +131,9 @@ const DashboardTabsEnergy = {
             totalEnergy: Math.round(totalEnergy),
             reserve,
             availableEnergy: Math.round(availableEnergy),
+            remainingEnergy: Math.round(remainingEnergy),
+            remainingTime: remainingTime,
+            remainingDistance: remainingDistance,
             to: {
                 energy: Math.round(toEnergy),
                 time: Math.round(toEnergy / totalEnergy * (totalDistance / profile.cruiseSpeed * 60)),
@@ -180,6 +191,30 @@ const DashboardTabsEnergy = {
                         <div class="dashboard-energy-card-icon">🔋</div>
                         <div class="dashboard-energy-card-value">${data.reserve}%</div>
                         <div class="dashboard-energy-card-label">Резерв</div>
+                    </div>
+                </div>
+
+                <!-- Оставшееся время -->
+                <div style="margin-top: 20px; padding: 15px; background: linear-gradient(135deg, rgba(56, 161, 105, 0.1) 0%, rgba(56, 161, 105, 0.05) 100%); border-radius: 12px; border: 2px solid rgba(56, 161, 105, 0.3);">
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; text-align: center;">
+                        <div>
+                            <div style="font-size: 10px; color: #718096; text-transform: uppercase; margin-bottom: 6px;">🔋 Оставшаяся энергия</div>
+                            <div style="font-size: 22px; font-weight: 700; color: #38a169;">${data.remainingEnergy} Вт·ч</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 10px; color: #718096; text-transform: uppercase; margin-bottom: 6px;">⏱️ Можно ещё лететь</div>
+                            <div style="font-size: 22px; font-weight: 700; color: #38a169;">${data.remainingTime} мин</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 10px; color: #718096; text-transform: uppercase; margin-bottom: 6px;">🛤️ Дистанция</div>
+                            <div style="font-size: 22px; font-weight: 700; color: #38a169;">${data.remainingDistance} км</div>
+                        </div>
+                    </div>
+                    <div style="margin-top: 12px; padding: 10px; background: rgba(56, 161, 105, 0.05); border-radius: 8px; border: 1px solid rgba(56, 161, 105, 0.2);">
+                        <div style="font-size: 11px; color: #276749; display: flex; align-items: center; gap: 6px;">
+                            <i class="fas fa-info-circle" style="color: #38a169;"></i>
+                            <span>Достаточно энергии для полёта на другой маршрут в течение <strong>${data.remainingTime} мин</strong> (${data.remainingDistance} км)</span>
+                        </div>
                     </div>
                 </div>
             </div>
