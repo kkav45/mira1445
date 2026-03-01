@@ -38,7 +38,7 @@ const DashboardTabsSegments = {
     },
 
     renderContent(segments, segmentAnalysis) {
-        const totalDistance = segments.reduce((sum, s) => sum + (s.distance || 0), 0).toFixed(1);
+        const totalDistance = Math.round(segments.reduce((sum, s) => sum + (s.distance || 0), 0) * 10) / 10;
         const avgRisk = this.calculateAverageRisk(segmentAnalysis);
 
         return `
@@ -207,17 +207,23 @@ const DashboardTabsSegments = {
 
             const riskClass = analysis?.riskLevel === 'low' ? 'low' : analysis?.riskLevel === 'medium' ? 'medium' : 'high';
             const riskLabel = analysis?.riskLevel === 'low' ? '🟢' : analysis?.riskLevel === 'medium' ? '🟡' : '🔴';
+            const distance = Math.round((s.distance || 0) * 10) / 10;
+            const wind10m = Math.round((firstHour.wind10m || firstHour.wind || 0) * 10) / 10;
+            const temp2m = Math.round((firstHour.temp2m || firstHour.temp || 0) * 10) / 10;
+            const precip = Math.round((firstHour.precip || firstHour.precipitation || 0) * 10) / 10;
+            const visibility = Math.round((firstHour.visibility || 5) * 10) / 10;
+            const humidity = Math.round((firstHour.humidity || firstHour.relative_humidity_2m || 0) * 10) / 10;
 
             return `
                 <tr>
                     <td><strong>С${i + 1}</strong></td>
                     <td>${riskLabel}</td>
-                    <td>${s.distance || 5}</td>
-                    <td>${firstHour.wind10m || firstHour.wind || 0}</td>
-                    <td>${firstHour.temp2m > 0 ? '+' : ''}${firstHour.temp2m || 0}</td>
-                    <td>${firstHour.precip || firstHour.precipitation || 0}</td>
-                    <td>${firstHour.visibility || 5}</td>
-                    <td>${firstHour.humidity || firstHour.relative_humidity_2m || 0}%</td>
+                    <td>${distance} км</td>
+                    <td>${wind10m} м/с</td>
+                    <td>${temp2m > 0 ? '+' : ''}${temp2m}°C</td>
+                    <td>${precip} мм/ч</td>
+                    <td>${visibility} км</td>
+                    <td>${humidity}%</td>
                 </tr>
             `;
         }).join('');
