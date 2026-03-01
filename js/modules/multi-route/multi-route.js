@@ -271,6 +271,26 @@ const MultiRouteModule = {
         // Глобальная оптимизация (исключение дублирования)
         this.assignment = this.optimizeGlobalAssignment(assignment);
 
+        // Детальный расчёт энергии для каждой базы
+        if (typeof MultiRouteEnergyCalculator !== 'undefined') {
+            this.assignment = this.assignment.map(baseAssignment => {
+                const energyResult = MultiRouteEnergyCalculator.calculateBaseEnergy(
+                    baseAssignment.base,
+                    baseAssignment.routes,
+                    weatherData
+                );
+
+                return {
+                    ...baseAssignment,
+                    energyCalculation: energyResult,
+                    totalDistance: energyResult.totalDistance,
+                    totalEnergy: energyResult.totalEnergy,
+                    reserve: energyResult.reserve,
+                    status: energyResult.status
+                };
+            });
+        }
+
         console.log('✅ Оптимизация завершена');
         return this.assignment;
     },
