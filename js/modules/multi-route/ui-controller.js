@@ -180,9 +180,10 @@ const MultiRouteUI = {
 
         MultiRouteModule.addTakeoffPoint(point);
 
-        // Визуализация на карте
-        if (typeof MultiRouteMapModule !== 'undefined') {
+        // Визуализация на карте (если модуль карты инициализирован)
+        if (typeof MultiRouteMapModule !== 'undefined' && MultiRouteMapModule.map) {
             MultiRouteMapModule.displayTakeoffPoint(point);
+            MultiRouteMapModule.fitToTakeoffPoints();
         }
 
         // Обновление вкладки дашборда
@@ -249,9 +250,10 @@ const MultiRouteUI = {
                 if (route) {
                     MultiRouteModule.addRoute(route);
 
-                    // Визуализация на карте
-                    if (typeof MultiRouteMapModule !== 'undefined') {
+                    // Визуализация на карте (если модуль карты инициализирован)
+                    if (typeof MultiRouteMapModule !== 'undefined' && MultiRouteMapModule.map) {
                         MultiRouteMapModule.displayRoute(route);
+                        MultiRouteMapModule.fitToRoutes();
                     }
 
                     // Обновление вкладки дашборда
@@ -415,6 +417,38 @@ const MultiRouteUI = {
     refreshDashboard() {
         if (typeof DashboardModule !== 'undefined' && DashboardModule.activeTab === 'multiroute') {
             DashboardModule.renderTabContent('multiroute');
+        }
+    },
+
+    /**
+     * Отобразить все данные на карте
+     */
+    displayAllData() {
+        if (typeof MultiRouteMapModule === 'undefined' || !MultiRouteMapModule.map) return;
+
+        // Очистка карты
+        MultiRouteMapModule.clear();
+
+        // Отобразить точки взлёта
+        if (MultiRouteModule.takeoffPoints.length > 0) {
+            MultiRouteMapModule.displayAllTakeoffPoints(MultiRouteModule.takeoffPoints);
+
+            // Отобразить зоны антенн
+            MultiRouteModule.takeoffPoints.forEach(base => {
+                MultiRouteMapModule.displayAntennaZone(base, base.antenna);
+            });
+        }
+
+        // Отобразить маршруты
+        if (MultiRouteModule.routes.length > 0) {
+            MultiRouteMapModule.displayAllRoutes(MultiRouteModule.routes);
+        }
+
+        // Приблизить ко всем объектам
+        if (MultiRouteModule.takeoffPoints.length > 0) {
+            MultiRouteMapModule.fitToTakeoffPoints();
+        } else if (MultiRouteModule.routes.length > 0) {
+            MultiRouteMapModule.fitToRoutes();
         }
     }
 };

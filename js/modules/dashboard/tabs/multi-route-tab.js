@@ -195,5 +195,10 @@ const DashboardTabsMultiRoute = {
     afterRender() {
         // Инициализация после рендера
         console.log('🗺️ Multi-Route Tab rendered');
+
+        // Отобразить все данные на карте
+        if (typeof MultiRouteUI !== 'undefined') {
+            setTimeout(() => MultiRouteUI.displayAllData(), 100);
+        }
     }
 };
