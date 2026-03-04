@@ -182,28 +182,54 @@ const TakeoffPointSelector = {
                 // Проверяем совпадение с существующими базами
                 const existingBase = this.findMatchingBase(point);
 
+                let baseId;
+                let baseName;
+
                 if (existingBase) {
                     // Привязка к существующей базе
-                    route.takeoffPoint = {
-                        lat: point.lat,
-                        lon: point.lon,
-                        baseId: existingBase.id,
-                        baseName: existingBase.name
-                    };
+                    baseId = existingBase.id;
+                    baseName = existingBase.name;
                     console.log('🔗 Привязка к базе:', existingBase.name);
                 } else {
-                    // Создание новой точки
-                    route.takeoffPoint = {
+                    // Создание новой базы автоматически
+                    const newBase = MultiRouteModule.addTakeoffPoint({
                         lat: point.lat,
                         lon: point.lon,
-                        baseId: null,
-                        baseName: 'Новая точка'
-                    };
-                    console.log('🆕 Новая точка взлёта');
+                        name: `База ${MultiRouteModule.takeoffPoints.length + 1}`,
+                        priority: MultiRouteModule.takeoffPoints.length + 1
+                    });
+                    baseId = newBase.id;
+                    baseName = newBase.name;
+                    console.log('🆕 Создана новая база:', baseName);
                 }
+
+                // Устанавливаем точку взлёта для маршрута
+                route.takeoffPoint = {
+                    lat: point.lat,
+                    lon: point.lon,
+                    baseId: baseId,
+                    baseName: baseName
+                };
+                route.assignedBaseId = baseId;
 
                 // Отображаем маркер на карте
                 this.displayTakeoffMarker(point, route.name);
+
+                // Отображаем точку взлёта на карте (через MultiRouteMapModule)
+                if (typeof MultiRouteMapModule !== 'undefined' && MultiRouteMapModule.map) {
+                    const base = MultiRouteModule.takeoffPoints.find(b => b.id === baseId);
+                    if (base) {
+                        console.log('🗺️ Отображение точки взлёта через MultiRouteMapModule:', base);
+                        MultiRouteMapModule.displayTakeoffPoint(base);
+                    } else {
+                        console.warn('⚠️ База не найдена:', baseId);
+                    }
+                } else {
+                    console.warn('⚠️ MultiRouteMapModule не доступен:', {
+                        defined: typeof MultiRouteMapModule !== 'undefined',
+                        hasMap: MultiRouteMapModule?.map
+                    });
+                }
 
                 // Обновляем UI
                 this.updateRouteTakeoffUI(routeId);

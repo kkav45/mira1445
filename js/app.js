@@ -45,6 +45,11 @@ const App = {
      * Инициализация модулей
      */
     initModules() {
+        // Инициализация RouteModule
+        if (typeof RouteModule !== 'undefined') {
+            RouteModule.init();
+        }
+
         // Инициализация WizardModule
         if (typeof WizardModule !== 'undefined') {
             WizardModule.init({
@@ -67,10 +72,15 @@ const App = {
      */
     initMap() {
         if (typeof MapModule !== 'undefined') {
-            MapModule.init('map');
+            const map = MapModule.init('map');
             
+            console.log('🗺️ MapModule.init() вернул:', map);
+            console.log('🗺️ MapModule.map:', MapModule.map);
+
             // Центрирование на Москве по умолчанию
             MapModule.centerOnPoint(55.7558, 37.6173, 10);
+        } else {
+            console.warn('⚠️ MapModule не загружен');
         }
     },
 
@@ -324,50 +334,6 @@ const App = {
     },
 
     /**
-     * Открытие настроек
-     */
-    openSettings() {
-        const modal = document.getElementById('settingsModal');
-        if (modal) {
-            // Загружаем текущие настройки
-            const thresholds = Storage.getThresholds();
-            
-            Object.entries(thresholds).forEach(([key, value]) => {
-                const input = document.getElementById(`setting_${key}`);
-                if (input) {
-                    input.value = value;
-                }
-            });
-
-            modal.classList.add('active');
-        }
-    },
-
-    /**
-     * Сохранение настроек
-     */
-    saveSettings() {
-        const thresholds = {
-            windGround: parseFloat(document.getElementById('setting_windGround')?.value) || 10,
-            windAlt: parseFloat(document.getElementById('setting_windAlt')?.value) || 15,
-            visibility: parseFloat(document.getElementById('setting_visibility')?.value) || 2,
-            precip: parseFloat(document.getElementById('setting_precip')?.value) || 1.4,
-            tempMin: parseFloat(document.getElementById('setting_tempMin')?.value) || -10,
-            tempMax: parseFloat(document.getElementById('setting_tempMax')?.value) || 35,
-            cloudCeiling: parseFloat(document.getElementById('setting_cloudCeiling')?.value) || 300,
-            humidityIcing: parseFloat(document.getElementById('setting_humidityIcing')?.value) || 80
-        };
-
-        Storage.saveThresholds(thresholds);
-        showToast('Настройки сохранены', 'success');
-
-        const modal = document.getElementById('settingsModal');
-        if (modal) {
-            modal.classList.remove('active');
-        }
-    },
-
-    /**
      * Переключение режима маршрута
      */
     toggleRouteMode() {
@@ -502,12 +468,16 @@ const App = {
             if (typeof WizardModule !== 'undefined') {
                 WizardModule.stepData.segments = RouteModule.segments;
                 WizardModule.stepData.segmentAnalysis = RouteModule.segmentAnalysis;
-                WizardModule.nextStep();
             }
 
             // 🔄 Обновляем состояние кнопки ДАШБОРД
             if (typeof DashboardModule !== 'undefined') {
                 DashboardModule.updateButtonState();
+            }
+
+            // Открываем дашборд сразу после анализа
+            if (typeof DashboardModule !== 'undefined' && typeof DashboardModule.open === 'function') {
+                DashboardModule.open();
             }
 
             showToast('Анализ завершён', 'success');
@@ -520,6 +490,64 @@ const App = {
      * Получение метео (для совместимости)
      */
     async getWeather() {
+        // Проверка: есть ли загруженные маршруты в MultiRouteModule
+        const hasMultiRoutes = typeof MultiRouteModule !== 'undefined' && 
+                               MultiRouteModule.routes && 
+                               MultiRouteModule.routes.length > 0;
+
+        if (hasMultiRoutes) {
+            // Если есть мульти-маршруты — запускаем анализ всех маршрутов
+            console.log('🔍 Запуск анализа всех мульти-маршрутов...');
+            if (typeof MultiRouteWizardIntegration !== 'undefined') {
+                await MultiRouteWizardIntegration.analyzeAllRoutes();
+            } else {
+                showToast('MultiRouteWizardIntegration не загружен', 'error');
+            }
+            return;
+        }
+
+        // Проверка: есть ли маршруты в RouteModule (одиночные)
+        const hasSingleRoutes = typeof RouteModule !== 'undefined' && 
+                                RouteModule.getSavedRoutes &&
+                                RouteModule.getSavedRoutes().length > 0;
+
+        if (hasSingleRoutes) {
+            // Если есть одиночные маршруты — анализируем их
+            console.log('🔍 Запуск анализа одиночных маршрутов...');
+            const routes = RouteModule.getSavedRoutes();
+            
+            if (routes.length > 0) {
+                // Загружаем первый маршрут
+                const route = routes[0];
+                RouteModule.loadRoute(route.id);
+                
+                // Получаем дату анализа
+                const date = new Date().toISOString().slice(0, 16);
+                
+                // Анализируем сегменты
+                await RouteModule.analyzeSegments(date);
+                
+                // Сохраняем данные
+                if (typeof WizardModule !== 'undefined') {
+                    WizardModule.stepData.route = route;
+                    WizardModule.stepData.segments = RouteModule.segments;
+                    WizardModule.stepData.segmentAnalysis = RouteModule.segmentAnalysis;
+                }
+                
+                // Отображаем данные
+                this.displayWeatherData(RouteModule.segmentAnalysis[0]?.analyzed);
+                
+                // 🔄 Обновляем состояние кнопки ДАШБОРД
+                if (typeof DashboardModule !== 'undefined') {
+                    DashboardModule.updateButtonState();
+                }
+                
+                showToast('Маршруты проанализированы', 'success');
+            }
+            return;
+        }
+
+        // Если маршрутов нет — анализируем точку (старая логика)
         const latInput = document.getElementById('latInput');
         const lonInput = document.getElementById('lonInput');
 
@@ -621,8 +649,6 @@ const App = {
 // Глобальные функции для доступа из HTML
 window.switchTab = (tabName) => App.switchTab(tabName);
 window.exportReport = () => App.exportReport();
-window.openSettings = () => App.openSettings();
-window.saveSettings = () => App.saveSettings();
 window.toggleRouteMode = () => App.toggleRouteMode();
 window.toggleRiskZones = () => App.toggleRiskZones();
 window.clearRoute = () => App.clearRoute();

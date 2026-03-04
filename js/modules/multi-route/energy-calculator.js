@@ -1,7 +1,7 @@
 /**
  * MIRA - Multi-Route Energy Calculator
  * Детальный расчёт энергии для мульти-маршрутной системы
- * Версия: 0.3.0
+ * Версия: 0.4.0 — с учётом индивидуальных метеоданных для каждого сегмента
  */
 
 const MultiRouteEnergyCalculator = {
@@ -30,12 +30,12 @@ const MultiRouteEnergyCalculator = {
     },
 
     /**
-     * Расчёт энергии для сегмента
+     * Расчёт энергии для сегмента с учётом ветра (ОБНОВЛЁННАЯ)
      */
     calculateSegmentEnergy(segment, weather, profile) {
         const distance = segment.distance || 5;  // км
         const wind = weather?.wind10m || 0;
-        const windDir = weather?.windDir || 0;
+        const windDir = weather?.windDir || weather?.windDirection10m || 0;
 
         // Угол между ветром и направлением полёта
         const routeAngle = segment.heading || 90;  // по умолчанию восток
@@ -59,12 +59,66 @@ const MultiRouteEnergyCalculator = {
             headwind: Math.round(headwind * 10) / 10,
             time: Math.round(timeHours * 60),  // минут
             power: Math.round(totalPower),
-            energy: Math.round(energy)
+            energy: Math.round(energy),
+            windSpeed: wind,
+            windDirection: windDir
         };
     },
 
     /**
-     * Расчёт энергии для маршрута (туда и обратно от точки входа)
+     * Расчёт энергии для сегмента с индивидуальными метеоданными (НОВОЕ)
+     */
+    calculateSegmentEnergyWithIndividualWeather(segment, segmentWeather, profile) {
+        const distance = segment.distance || 5;  // км
+        
+        // Получаем погоду для этого конкретного сегмента
+        const weather = segmentWeather?.weather || { hourly: [] };
+        const wind = this.getAverageWindFromWeather(weather);
+        const windDir = weather.hourly?.[0]?.windDirection10m || 0;
+
+        // Угол между ветром и направлением полёта
+        const routeAngle = segment.heading || 90;
+        const windAngle = windDir - routeAngle;
+        const headwind = -wind * Math.cos(windAngle * Math.PI / 180);
+
+        // Путевая скорость
+        const groundSpeed = profile.cruiseSpeed + headwind * 3.6;
+        const timeHours = distance / Math.max(30, groundSpeed);
+
+        // Мощность с учётом ветра
+        const windPower = 0.5 * Math.pow(Math.max(0, headwind * 3.6), 2);
+        const totalPower = profile.basePower + windPower;
+
+        // Энергия
+        const energy = totalPower * timeHours;
+
+        return {
+            distance: Math.round(distance * 10) / 10,
+            groundSpeed: Math.round(groundSpeed),
+            headwind: Math.round(headwind * 10) / 10,
+            time: Math.round(timeHours * 60),
+            power: Math.round(totalPower),
+            energy: Math.round(energy),
+            windSpeed: wind,
+            windDirection: windDir,
+            hasIndividualWeather: true
+        };
+    },
+
+    /**
+     * Получение среднего ветра из данных погоды
+     */
+    getAverageWindFromWeather(weather) {
+        if (!weather || !weather.hourly || weather.hourly.length === 0) {
+            return 0;
+        }
+        const hourly = weather.hourly.slice(0, 6);
+        const avgWind = hourly.reduce((sum, h) => sum + (h.wind10m || 0), 0) / hourly.length;
+        return Math.round(avgWind * 10) / 10;
+    },
+
+    /**
+     * Расчёт энергии для маршрута (туда и обратно от точки входа) (ОБНОВЛЁННАЯ)
      */
     calculateRouteEnergy(route, entryPoint, weatherData, battery) {
         const profile = { ...this.defaultProfile, ...battery };
@@ -77,30 +131,56 @@ const MultiRouteEnergyCalculator = {
         let leftEnergy = 0;
         let leftDistance = 0;
         let leftTime = 0;
+        let leftWindSummary = { segments: [] };
 
         for (let i = entryIndex; i > 0; i--) {
             const segment = segments[i];
-            const weather = this.getWeatherForSegment(weatherData, segment);
-            const result = this.calculateSegmentEnergy(segment, weather, profile);
+            
+            // Проверяем, есть ли индивидуальные метеоданные для сегмента
+            const segmentWeather = route.segmentWeatherData?.find(sw => sw.segmentId === segment.id);
+            const weather = segmentWeather ? segmentWeather.weather : this.getWeatherForSegment(weatherData, segment);
+            
+            const result = segmentWeather 
+                ? this.calculateSegmentEnergyWithIndividualWeather(segment, segmentWeather, profile)
+                : this.calculateSegmentEnergy(segment, weather, profile);
 
             leftEnergy += result.energy;
             leftDistance += result.distance;
             leftTime += result.time;
+            leftWindSummary.segments.push({
+                segmentId: segment.id,
+                windSpeed: result.windSpeed,
+                windDirection: result.windDirection,
+                energy: result.energy
+            });
         }
 
         // Правая сторона (от точки входа к концу)
         let rightEnergy = 0;
         let rightDistance = 0;
         let rightTime = 0;
+        let rightWindSummary = { segments: [] };
 
         for (let i = entryIndex; i < segments.length; i++) {
             const segment = segments[i];
-            const weather = this.getWeatherForSegment(weatherData, segment);
-            const result = this.calculateSegmentEnergy(segment, weather, profile);
+            
+            // Проверяем, есть ли индивидуальные метеоданные для сегмента
+            const segmentWeather = route.segmentWeatherData?.find(sw => sw.segmentId === segment.id);
+            const weather = segmentWeather ? segmentWeather.weather : this.getWeatherForSegment(weatherData, segment);
+            
+            const result = segmentWeather 
+                ? this.calculateSegmentEnergyWithIndividualWeather(segment, segmentWeather, profile)
+                : this.calculateSegmentEnergy(segment, weather, profile);
 
             rightEnergy += result.energy;
             rightDistance += result.distance;
             rightTime += result.time;
+            rightWindSummary.segments.push({
+                segmentId: segment.id,
+                windSpeed: result.windSpeed,
+                windDirection: result.windDirection,
+                energy: result.energy
+            });
         }
 
         // Возврат в точку входа (не требуется, уже там)
@@ -113,12 +193,14 @@ const MultiRouteEnergyCalculator = {
             leftSide: {
                 distance: Math.round(leftDistance * 10) / 10,
                 time: Math.round(leftTime),
-                energy: Math.round(leftEnergy)
+                energy: Math.round(leftEnergy),
+                windSummary: leftWindSummary
             },
             rightSide: {
                 distance: Math.round(rightDistance * 10) / 10,
                 time: Math.round(rightTime),
-                energy: Math.round(rightEnergy)
+                energy: Math.round(rightEnergy),
+                windSummary: rightWindSummary
             },
             return: {
                 distance: 0,
@@ -128,7 +210,8 @@ const MultiRouteEnergyCalculator = {
             total: {
                 distance: Math.round((leftDistance + rightDistance) * 10) / 10,
                 time: Math.round(leftTime + rightTime),
-                energy: Math.round(leftEnergy + rightEnergy)
+                energy: Math.round(leftEnergy + rightEnergy),
+                hasIndividualWeather: !!(route.segmentWeatherData && route.segmentWeatherData.length > 0)
             }
         };
     },

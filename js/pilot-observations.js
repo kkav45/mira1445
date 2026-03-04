@@ -259,7 +259,7 @@ const PilotObservationsModule = {
             }
 
             // Влажность
-            const humidityCorrections = weights.filter(w => w.obs.humidity);
+            const humidityCorrections = weights.filter(w => w.obs.humidity !== null && w.obs.humidity !== undefined);
             if (humidityCorrections.length > 0) {
                 const weightedOffset = humidityCorrections.reduce((sum, w) =>
                     sum + (w.obs.humidity - hour.humidity) * w.weight, 0

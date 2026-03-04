@@ -1,4 +1,4 @@
-/**
+﻿/**
  * MIRA - PDF Экспорт (2-страничная версия)
  * Красивый отчёт с отступами и реальными данными
  */
@@ -19,34 +19,63 @@ const PdfExport2PageModule = {
     },
 
     /**
+     * Инициализация pdfMake
+     */
+    initPdfMake() {
+        if (typeof pdfMake !== 'undefined') {
+            pdfMake.fonts = this.fonts;
+            console.log('✅ pdfMake инициализирован');
+        }
+    },
+
+    /**
      * Генерация отчёта
      */
     async generateReport(data) {
-        Utils.log('PDF Export: начало генерации', data);
+        console.log('📄 PDF Export: начало генерации', data);
 
-        if (!data || !data.route) {
+        // Поддержка старого формата (один маршрут) и нового (массив маршрутов)
+        let routes = data.routes || [];
+
+        if (routes.length === 0 && data.route) {
+            // Старый формат - один маршрут
+            routes = [data];
+        }
+
+        if (routes.length === 0) {
             showToast('Нет данных для экспорта', 'error');
             return;
         }
 
         if (typeof pdfMake === 'undefined') {
-            showToast('PDF модуль не загружен', 'error');
+            console.error('❌ pdfMake не загружен');
+            showToast('PDF модуль не загружен. Обновите страницу.', 'error');
             return;
         }
 
+        // Инициализация шрифтов
+        this.initPdfMake();
+
         try {
-            const docDefinition = this.createDocDefinition(data);
-            Utils.log('PDF Export: docDefinition создан');
+            console.log('📄 PDF Export: создание документа...');
+            const docDefinition = this.createDocDefinition({ routes, pilotData: data.pilotData, correctedAnalysis: data.correctedAnalysis });
+            console.log('📄 PDF Export: docDefinition создан');
 
             pdfMake.fonts = this.fonts;
             const pdf = pdfMake.createPdf(docDefinition);
+            console.log('📄 PDF Export: PDF создан, начинается загрузка...');
 
-            pdf.download(`${this.formatFilename(data.route.name)}.pdf`);
+            const filename = routes.length === 1
+                ? this.formatFilename(routes[0].route.name)
+                : `MIRA_Report_${new Date().toISOString().split('T')[0]}`;
+            
+            pdf.download(`${filename}.pdf`, () => {
+                console.log('✅ PDF успешно загружен');
+            });
 
-            Utils.log('PDF отчёт сгенерирован');
+            console.log('📄 PDF отчёт сгенерирован');
         } catch (error) {
-            console.error('Ошибка в generateReport:', error);
-            Utils.error('Ошибка генерации PDF', error);
+            console.error('❌ Ошибка в generateReport:', error);
             showToast('Ошибка при создании PDF: ' + error.message, 'error');
         }
     },
@@ -55,57 +84,59 @@ const PdfExport2PageModule = {
      * Создание структуры документа
      */
     createDocDefinition(data) {
-        // ✅ Используем скорректированные данные, если они есть
-        const summary = data.summary || {
-            totalSegments: data.segments?.length || 0,
-            totalDistance: '0',
-            flightTime: '0',
-            overallRisk: 'low',
-            riskLevels: { low: 0, medium: 0, high: 0 }
-        };
+        const routes = data.routes || [];
+        const pilotData = data.pilotData;
+        
+        const content = [];
 
-        // ✅ Если есть скорректированный анализ, используем его summary
-        if (data.correctedAnalysis?.summary) {
-            summary.overallRisk = data.correctedAnalysis.summary.overallRisk || summary.overallRisk;
-            summary.riskLevels = data.correctedAnalysis.summary.riskLevels || summary.riskLevels;
-            summary.avgWind = data.correctedAnalysis.summary.avgWind || summary.avgWind;
-            summary.maxWind = data.correctedAnalysis.summary.maxWind || summary.maxWind;
-            summary.totalPrecip = data.correctedAnalysis.summary.totalPrecip || summary.totalPrecip;
-        }
+        // Заголовок документа
+        content.push(this.createMainHeader(routes));
+        content.push({ text: '', margin: [0, 10] });
+
+        // По каждому маршруту
+        routes.forEach((routeData, index) => {
+            const route = routeData.route;
+            const segmentAnalysis = routeData.segmentAnalysis || [];
+            const meteorology = routeData.meteorology;
+            const flightWindows = routeData.flightWindows || [];
+            const recommendations = routeData.recommendations || [];
+            
+            // Заголовок маршрута
+            content.push(this.createRouteHeader(route, segmentAnalysis));
+            content.push({ text: '', margin: [0, 8] });
+
+            // Параметры маршрута
+            content.push(this.createRouteParams(route, segmentAnalysis));
+            content.push({ text: '', margin: [0, 10] });
+
+            // Метеоанализ
+            content.push(this.createMeteorologySection(meteorology));
+            content.push({ text: '', margin: [0, 10] });
+
+            // Данные пилота (если есть)
+            if (pilotData) {
+                content.push(this.createPilotDataSection(pilotData));
+                content.push({ text: '', margin: [0, 10] });
+            }
+
+            // Окна безопасности
+            content.push(this.createFlightWindowsSectionPDF(flightWindows));
+            content.push({ text: '', margin: [0, 10] });
+
+            // Рекомендации
+            content.push(this.createRecommendationsPDF(recommendations));
+            
+            // Разделитель между маршрутами
+            if (index < routes.length - 1) {
+                content.push({ text: '', margin: [0, 20], pageBreak: 'after' });
+            }
+        });
 
         return {
             pageSize: 'A4',
             pageOrientation: 'portrait',
-            pageMargins: [60, 40, 40, 50],
-            content: [
-                // Заголовок
-                this.createHeader(data),
-
-                { text: '', margin: [0, 10] },
-
-                // Сводка маршрута
-                this.createRouteSummary(summary),
-
-                { text: '', margin: [0, 12] },
-
-                // Рекомендации
-                this.createRecommendationsSection(data),
-
-                { text: '', margin: [0, 12] },
-
-                // Сравнение прогноза и факта
-                this.createComparisonSection(data),
-
-                { text: '', margin: [0, 12] },
-
-                // Временные окна
-                this.createFlightWindowsSection(data),
-
-                { text: '', margin: [0, 12] },
-
-                // Детализация по сегментам
-                this.createSegmentsDetailSection(data)
-            ],
+            pageMargins: [40, 35, 35, 40],
+            content: content,
             styles: this.getStyles(),
             footer: (currentPage, pageCount) => {
                 return {
@@ -119,9 +150,9 @@ const PdfExport2PageModule = {
     },
 
     /**
-     * Заголовок документа
+     * Главный заголовок документа
      */
-    createHeader(data) {
+    createMainHeader(routes) {
         const date = new Date().toLocaleString('ru-RU', {
             day: '2-digit',
             month: 'long',
@@ -145,20 +176,44 @@ const PdfExport2PageModule = {
                         {
                             stack: [
                                 { text: `Дата: ${date}`, style: 'meta' },
-                                { text: `Маршрут: ${data.route?.name || '—'}`, style: 'meta', alignment: 'right' }
+                                { text: `Маршрутов: ${routes.length}`, style: 'meta', alignment: 'right' }
                             ],
                             alignment: 'right'
                         }
-                    ],
+                    ]
+                ]
+            },
+            layout: 'noBorders'
+        };
+    },
+
+    /**
+     * Заголовок маршрута
+     */
+    createRouteHeader(route, segmentAnalysis) {
+        const overallRisk = segmentAnalysis?.[0]?.riskLevel || 'low';
+        const riskLabels = { low: 'НИЗКИЙ', medium: 'СРЕДНИЙ', high: 'ВЫСОКИЙ' };
+        const riskColors = { low: '#38a169', medium: '#ed8936', high: '#e53e3e' };
+
+        return {
+            table: {
+                widths: ['*', 'auto'],
+                body: [
                     [
                         {
-                            text: 'Отчёт о метеоусловиях и анализе рисков',
-                            style: 'subtitle',
-                            alignment: 'center',
-                            colSpan: 2,
-                            margin: [0, 8, 0, 0]
+                            stack: [
+                                { text: `🛣️ ${route.name}`, style: 'routeTitle' },
+                                { text: `Тип: ${route.type === 'kml' ? 'KML' : 'Ручной'}`, style: 'small' }
+                            ],
+                            alignment: 'left'
                         },
-                        {}
+                        {
+                            text: `⚠️ ${riskLabels[overallRisk] || '—'}`,
+                            style: 'riskBadge',
+                            fillColor: riskColors[overallRisk] || '#cbd5e0',
+                            color: '#fff',
+                            alignment: 'right'
+                        }
                     ]
                 ]
             },
@@ -167,22 +222,76 @@ const PdfExport2PageModule = {
                 vLineWidth: () => 0,
                 paddingLeft: () => 0,
                 paddingRight: () => 0,
-                paddingTop: () => 5,
-                paddingBottom: () => 5
-            },
-            margin: [0, 0, 0, 8]
+                paddingTop: () => 0,
+                paddingBottom: () => 3
+            }
         };
     },
 
     /**
-     * Сводка маршрута
+     * Параметры маршрута
      */
-    createRouteSummary(summary) {
-        const riskColors = {
-            low: '#38a169',
-            medium: '#ed8936',
-            high: '#e53e3e'
+    createRouteParams(route, segmentAnalysis) {
+        return {
+            table: {
+                widths: ['*', '*', '*', '*'],
+                body: [
+                    [
+                        {
+                            stack: [
+                                { text: 'Длина', style: 'paramLabel' },
+                                { text: `${route.distance?.toFixed(1) || 0} км`, style: 'paramValue' }
+                            ],
+                            alignment: 'center',
+                            fillColor: '#f7fafc'
+                        },
+                        {
+                            stack: [
+                                { text: 'Время', style: 'paramLabel' },
+                                { text: `${route.flightTime || 0} мин`, style: 'paramValue' }
+                            ],
+                            alignment: 'center',
+                            fillColor: '#f7fafc'
+                        },
+                        {
+                            stack: [
+                                { text: 'Сегменты', style: 'paramLabel' },
+                                { text: `${segmentAnalysis?.length || 0}`, style: 'paramValue' }
+                            ],
+                            alignment: 'center',
+                            fillColor: '#f7fafc'
+                        },
+                        {
+                            stack: [
+                                { text: 'Тип', style: 'paramLabel' },
+                                { text: route.type === 'kml' ? 'KML' : 'Ручной', style: 'paramValue' }
+                            ],
+                            alignment: 'center',
+                            fillColor: '#f7fafc'
+                        }
+                    ]
+                ]
+            },
+            layout: {
+                hLineWidth: () => 0,
+                vLineWidth: () => 0,
+                paddingLeft: () => 3,
+                paddingRight: () => 3,
+                paddingTop: () => 3,
+                paddingBottom: () => 3
+            }
         };
+    },
+
+    /**
+     * Метеоанализ
+     */
+    createMeteorologySection(meteorology) {
+        const hourly = meteorology?.hourly?.[0] || {};
+        const temp = hourly.temp2m !== undefined ? `${hourly.temp2m >= 0 ? '+' : ''}${Math.round(hourly.temp2m)}°C` : '—';
+        const wind = hourly.wind10m !== undefined ? `${hourly.wind10m.toFixed(1)} м/с` : '—';
+        const visibility = hourly.visibility !== undefined ? `${hourly.visibility} км` : '—';
+        const precip = hourly.precip !== undefined ? `${hourly.precip.toFixed(1)} мм` : '—';
 
         return {
             table: {
@@ -191,33 +300,77 @@ const PdfExport2PageModule = {
                     [
                         {
                             stack: [
-                                { text: 'Дистанция', style: 'label' },
-                                { text: `${summary.totalDistance || '0'} км`, style: 'value' }
+                                { text: '🌡️ Температура', style: 'meteoLabel' },
+                                { text: temp, style: 'meteoValue' }
+                            ],
+                            alignment: 'center',
+                            fillColor: 'rgba(59, 130, 246, 0.1)'
+                        },
+                        {
+                            stack: [
+                                { text: '💨 Ветер', style: 'meteoLabel' },
+                                { text: wind, style: 'meteoValue' }
+                            ],
+                            alignment: 'center',
+                            fillColor: 'rgba(16, 185, 129, 0.1)'
+                        },
+                        {
+                            stack: [
+                                { text: '👁️ Видимость', style: 'meteoLabel' },
+                                { text: visibility, style: 'meteoValue' }
+                            ],
+                            alignment: 'center',
+                            fillColor: 'rgba(245, 158, 11, 0.1)'
+                        },
+                        {
+                            stack: [
+                                { text: '🌧️ Осадки', style: 'meteoLabel' },
+                                { text: precip, style: 'meteoValue' }
+                            ],
+                            alignment: 'center',
+                            fillColor: 'rgba(139, 92, 246, 0.1)'
+                        }
+                    ]
+                ]
+            },
+            layout: {
+                hLineWidth: () => 0,
+                vLineWidth: () => 0,
+                paddingLeft: () => 5,
+                paddingRight: () => 5,
+                paddingTop: () => 5,
+                paddingBottom: () => 5
+            }
+        };
+    },
+
+    /**
+     * Данные пилота
+     */
+    createPilotDataSection(pilotData) {
+        return {
+            table: {
+                widths: ['*', '*', '*'],
+                body: [
+                    [
+                        {
+                            stack: [
+                                { text: '📍 Координаты', style: 'pilotLabel' },
+                                { text: `${pilotData.lat?.toFixed(4) || '—'}, ${pilotData.lon?.toFixed(4) || '—'}`, style: 'pilotValue' }
                             ],
                             alignment: 'center'
                         },
                         {
                             stack: [
-                                { text: 'Время', style: 'label' },
-                                { text: `${summary.flightTime || '0'} мин`, style: 'value' }
+                                { text: '💨 Ветер', style: 'pilotLabel' },
+                                { text: `${pilotData.windSpeed || '—'} м/с ${pilotData.windDir ? '(' + pilotData.windDir + '°)' : ''}`, style: 'pilotValue' }
                             ],
                             alignment: 'center'
                         },
                         {
                             stack: [
-                                { text: 'Сегментов', style: 'label' },
-                                { text: `${summary.totalSegments || 0}`, style: 'value' }
-                            ],
-                            alignment: 'center'
-                        },
-                        {
-                            stack: [
-                                { text: 'Риск', style: 'label' },
-                                {
-                                    text: this.getRiskLabel(summary.overallRisk || 'low'),
-                                    style: 'riskBadge',
-                                    color: riskColors[summary.overallRisk || 'low']
-                                }
+                                { text: '🌡️ Температура', style: 'pilotLabel' },
+                                { text: `${pilotData.temp || '—'}`, style: 'pilotValue' }
                             ],
                             alignment: 'center'
                         }
@@ -225,645 +378,204 @@ const PdfExport2PageModule = {
                 ]
             },
             layout: {
-                hLineWidth: (i) => i === 0 || i === 1 ? 2 : 0,
+                hLineWidth: () => 0,
                 vLineWidth: () => 0,
-                hLineColor: (i) => i === 0 ? '#667eea' : '#e2e8f0',
-                paddingLeft: () => 10,
-                paddingRight: () => 10,
-                paddingTop: () => 10,
-                paddingBottom: () => 10
+                paddingLeft: () => 5,
+                paddingRight: () => 5,
+                paddingTop: () => 5,
+                paddingBottom: () => 5
             },
-            margin: [0, 0, 0, 8]
+            margin: [0, 5, 0, 5]
+        };
+    },
+
+    /**
+     * Окна безопасности
+     */
+    createFlightWindowsSectionPDF(flightWindows) {
+        const safeWindows = (flightWindows || []).filter(w => w.risk === 'low');
+        
+        if (safeWindows.length === 0) {
+            return {
+                stack: [
+                    { text: '⏰ Окна безопасности', style: 'sectionTitle', margin: [0, 0, 0, 5] },
+                    { text: '⚠️ Безопасные окна не найдены', color: '#c05621', fontSize: 10 }
+                ]
+            };
+        }
+
+        const windowsText = safeWindows.map(w => `${w.start} – ${w.end} (${w.duration} ч)`).join(', ');
+
+        return {
+            stack: [
+                { text: '⏰ Окна безопасности', style: 'sectionTitle', margin: [0, 0, 0, 5] },
+                { text: windowsText, fontSize: 10, color: '#276749' }
+            ]
         };
     },
 
     /**
      * Рекомендации
      */
-    createRecommendationsSection(data) {
-        const recommendations = this.getRecommendationsList(data);
-
-        return {
-            stack: [
-                {
-                    text: 'РЕКОМЕНДАЦИИ',
-                    style: 'sectionTitle',
-                    margin: [0, 0, 0, 8]
-                },
-                recommendations.length > 0 ? {
-                    ul: recommendations.map(rec => ({
-                        text: rec.text.replace(/<[^>]*>/g, ''),
-                        color: this.getRecommendationColor(rec.type),
-                        fontSize: 10,
-                        margin: [0, 4, 0, 4]
-                    })),
-                    margin: [10, 0, 0, 0]
-                } : {
-                    text: 'Нет рекомендаций',
-                    style: 'note',
-                    fontSize: 10,
-                    italics: true,
-                    margin: [0, 3, 0, 0]
-                }
-            ],
-            background: '#f8fafc',
-            padding: 10,
-            borderRadius: 6
-        };
-    },
-
-    /**
-     * Сравнение прогноза и факта
-     */
-    createComparisonSection(data) {
-        const pilotData = data.pilotData;
-
-        // Если нет данных пилота, не показываем секцию
-        if (!pilotData) {
-            return { text: '', margin: [0, 0, 0, 0] };
+    createRecommendationsPDF(recommendations) {
+        if (!recommendations || recommendations.length === 0) {
+            return {
+                stack: [
+                    { text: '📋 Рекомендации', style: 'sectionTitle', margin: [0, 0, 0, 5] },
+                    { text: '✓ Все параметры в норме', color: '#276749', fontSize: 10 }
+                ]
+            };
         }
 
-        // ✅ Используем оригинальный прогноз ДО коррекции (если есть)
-        const forecast = data.originalAnalysis?.[0]?.analyzed?.hourly?.[0] || 
-                        data.segmentAnalysis?.[0]?.analyzed?.hourly?.[0] || {};
-
-        const windForecast = (forecast.wind10m || 0).toFixed(1);
-        const windFact = pilotData.windSpeed || '—';
-        const windCorrection = pilotData.windSpeed && forecast.wind10m > 0
-            ? `${((pilotData.windSpeed - forecast.wind10m) / forecast.wind10m * 100).toFixed(0)}%`
-            : '—';
-
-        const tempForecast = (forecast.temp2m || 0).toFixed(1);
-        const tempFact = pilotData.temp !== undefined ? pilotData.temp.toFixed(1) : '—';
-        const tempCorrection = pilotData.temp !== undefined
-            ? `${pilotData.temp >= 0 ? '+' : ''}${(pilotData.temp - forecast.temp2m).toFixed(1)}°C`
-            : '—';
-
-        const humidityForecast = (forecast.humidity || 0).toFixed(0);
-        const humidityFact = pilotData.humidity || '—';
-        const humidityCorrection = pilotData.humidity && forecast.humidity > 0
-            ? `${pilotData.humidity - forecast.humidity >= 0 ? '+' : ''}${pilotData.humidity - forecast.humidity}%`
-            : '—';
-
-        const visibilityForecast = (forecast.visibility || 5).toFixed(0);
-        const visibilityFact = pilotData.visibility || '—';
-        const visibilityCorrection = pilotData.visibility && pilotData.visibility < visibilityForecast
-            ? 'Ниже'
-            : '—';
-
-        const fogForecast = 'Нет';
-        const fogFact = pilotData.fog ? 'Да' : 'Нет';
-        const fogCorrection = pilotData.fog ? 'Не спрог.' : '—';
-
-        return {
-            stack: [
-                {
-                    text: 'СРАВНЕНИЕ ПРОГНОЗА И ФАКТА (Точка старта)',
-                    style: 'sectionTitle',
-                    margin: [0, 0, 0, 10]
-                },
-                {
-                    table: {
-                        widths: ['*', '*', '*', '*'],
-                        body: [
-                            [
-                                { text: 'Параметр', style: 'tableHeader' },
-                                { text: 'Прогноз', style: 'tableHeader' },
-                                { text: 'Факт', style: 'tableHeader' },
-                                { text: 'Коррекция', style: 'tableHeader' }
-                            ],
-                            [
-                                { text: 'Ветер (м/с)', fontSize: 9 },
-                                { text: windForecast, fontSize: 9, alignment: 'center' },
-                                { text: windFact, fontSize: 9, alignment: 'center', bold: true },
-                                { text: windCorrection, fontSize: 9, alignment: 'center' }
-                            ],
-                            [
-                                { text: 'Температура', fontSize: 9 },
-                                { text: `${tempForecast}°C`, fontSize: 9, alignment: 'center' },
-                                { text: `${tempFact}°C`, fontSize: 9, alignment: 'center', bold: true },
-                                { text: tempCorrection, fontSize: 9, alignment: 'center' }
-                            ],
-                            [
-                                { text: 'Влажность', fontSize: 9 },
-                                { text: `${humidityForecast}%`, fontSize: 9, alignment: 'center' },
-                                { text: `${humidityFact}%`, fontSize: 9, alignment: 'center', bold: true },
-                                { text: humidityCorrection, fontSize: 9, alignment: 'center' }
-                            ],
-                            [
-                                { text: 'Видимость', fontSize: 9 },
-                                { text: `${visibilityForecast} км`, fontSize: 9, alignment: 'center' },
-                                { text: `${visibilityFact} км`, fontSize: 9, alignment: 'center', bold: true },
-                                { 
-                                    text: visibilityCorrection, 
-                                    fontSize: 9, 
-                                    alignment: 'center',
-                                    color: visibilityCorrection === 'Ниже' ? '#e53e3e' : '#4a5568'
-                                }
-                            ],
-                            [
-                                { text: 'Туман', fontSize: 9 },
-                                { text: fogForecast, fontSize: 9, alignment: 'center' },
-                                { text: fogFact, fontSize: 9, alignment: 'center', bold: true },
-                                { 
-                                    text: fogCorrection, 
-                                    fontSize: 9, 
-                                    alignment: 'center',
-                                    color: fogCorrection === 'Не спрог.' ? '#ed8936' : '#4a5568'
-                                }
-                            ]
-                        ]
-                    },
-                    layout: {
-                        hLineWidth: (i) => i === 0 ? 2 : 1,
-                        vLineWidth: () => 0,
-                        hLineColor: (i) => i === 0 ? '#667eea' : '#e2e8f0',
-                        paddingLeft: () => 10,
-                        paddingRight: () => 10,
-                        paddingTop: () => 6,
-                        paddingBottom: () => 6
-                    },
-                    margin: [0, 0, 0, 10]
-                }
-            ],
-            background: '#f0f9ff',
-            padding: 12,
-            borderRadius: 6
-        };
-    },
-
-    /**
-     * Временные окна
-     */
-    createFlightWindowsSection(data) {
-        const analyzed = data.segmentAnalysis?.[0]?.analyzed;
-        const windows = analyzed?.summary?.flightWindows || [];
-
-        return {
-            stack: [
-                {
-                    text: 'БЛАГОПРИЯТНЫЕ ВРЕМЕННЫЕ ОКНА',
-                    style: 'sectionTitle',
-                    margin: [0, 0, 0, 8]
-                },
-                windows.length > 0 ? {
-                    table: {
-                        widths: ['auto', 'auto', 'auto', '*'],
-                        body: [
-                            [
-                                { text: '№', style: 'tableHeader' },
-                                { text: 'Начало', style: 'tableHeader' },
-                                { text: 'Окончание', style: 'tableHeader' },
-                                { text: 'Продолжительность', style: 'tableHeader' }
-                            ],
-                            ...windows.map((w, i) => [
-                                { 
-                                    text: `${i + 1}`, 
-                                    fontSize: 10, 
-                                    alignment: 'center',
-                                    bold: true
-                                },
-                                { 
-                                    text: this.formatTime(w.start), 
-                                    fontSize: 10,
-                                    bold: true
-                                },
-                                { 
-                                    text: this.formatTime(w.end), 
-                                    fontSize: 10,
-                                    bold: true
-                                },
-                                { 
-                                    text: `${w.hours.length} ч`, 
-                                    fontSize: 10, 
-                                    alignment: 'center'
-                                }
-                            ])
-                        ]
-                    },
-                    layout: {
-                        hLineWidth: (i) => i === 0 ? 2 : 1,
-                        vLineWidth: () => 0,
-                        hLineColor: (i) => i === 0 ? '#667eea' : '#e2e8f0',
-                        paddingLeft: () => 8,
-                        paddingRight: () => 8,
-                        paddingTop: () => 5,
-                        paddingBottom: () => 5
-                    },
-                    margin: [0, 3, 0, 8]
-                } : {
-                    text: 'Благоприятных окон не найдено',
-                    style: 'note',
-                    fontSize: 10,
-                    italics: true,
-                    margin: [0, 3, 0, 0]
-                }
-            ],
-            background: '#f0f9ff',
-            padding: 10,
-            borderRadius: 6
-        };
-    },
-
-    /**
-     * Детализация по сегментам (2 сегмента в ряду)
-     */
-    createSegmentsDetailSection(data) {
-        const segments = data.segments || [];
-        const analysis = data.segmentAnalysis || [];
-
-        if (segments.length === 0) {
-            return { text: 'Нет данных по сегментам', style: 'note' };
-        }
-
-        // Создаём массив пар сегментов
-        const segmentPairs = [];
-        for (let i = 0; i < segments.length; i += 2) {
-            segmentPairs.push({
-                left: segments[i],
-                right: segments[i + 1] || null,
-                leftAnalysis: analysis[i],
-                rightAnalysis: analysis[i + 1] || null
-            });
-        }
-
-        const content = [];
-
-        segmentPairs.forEach((pair, pairIndex) => {
-            const columns = [];
-
-            // Левый сегмент
-            if (pair.left && pair.leftAnalysis?.analyzed) {
-                columns.push(this.createSegmentBlock(pair.left, pair.leftAnalysis, pairIndex * 2 + 1));
-            }
-
-            // Правый сегмент
-            if (pair.right && pair.rightAnalysis?.analyzed) {
-                columns.push(this.createSegmentBlock(pair.right, pair.rightAnalysis, pairIndex * 2 + 2));
-            }
-
-            content.push({
-                columns: columns,
-                columnGap: 15,
-                margin: [0, 0, 0, 8]
-            });
+        const recs = recommendations.map(rec => {
+            const colors = {
+                success: '#38a169',
+                warning: '#ed8936',
+                critical: '#e53e3e',
+                info: '#3b82f6'
+            };
+            return {
+                text: `• ${rec.text}`,
+                fontSize: 9,
+                color: colors[rec.type] || '#2d3748',
+                margin: [5, 2, 0, 2]
+            };
         });
 
         return {
             stack: [
-                {
-                    text: 'ДЕТАЛИЗАЦИЯ ПО СЕГМЕНТАМ',
-                    style: 'sectionTitle',
-                    margin: [0, 0, 0, 10]
-                },
-                ...content
+                { text: '📋 Рекомендации', style: 'sectionTitle', margin: [0, 0, 0, 5] },
+                ...recs
             ]
         };
     },
 
     /**
-     * Создание блока сегмента
-     */
-    createSegmentBlock(segment, segAnalysis, segmentIndex) {
-        const analyzed = segAnalysis.analyzed;
-        const hourly = analyzed.hourly || [];
-        const heightsData = this.extractHeightsData(hourly);
-
-        return {
-            width: '46%',
-            stack: [
-                // Заголовок сегмента
-                {
-                    table: {
-                        widths: ['*', 'auto'],
-                        body: [
-                            [
-                                {
-                                    text: `Сегмент ${segmentIndex}`,
-                                    style: 'segmentTitle',
-                                    margin: [0, 0, 0, 2]
-                                },
-                                {
-                                    text: `${segment.distance?.toFixed(1) || '0'} км`,
-                                    style: 'segmentDistance',
-                                    alignment: 'right'
-                                }
-                            ]
-                        ]
-                    },
-                    layout: 'noBorders',
-                    margin: [0, 0, 0, 4]
-                },
-
-                // Таблица по высотам
-                {
-                    table: {
-                        widths: ['*', '*', '*', '*', '*', '*'],
-                        body: [
-                            [
-                                { text: 'Выс', style: 'tableHeaderSmall' },
-                                { text: 'Вет', style: 'tableHeaderSmall' },
-                                { text: 'Тем', style: 'tableHeaderSmall' },
-                                { text: 'Дав', style: 'tableHeaderSmall' },
-                                { text: 'Вл', style: 'tableHeaderSmall' },
-                                { text: 'Риск', style: 'tableHeaderSmall' }
-                            ],
-                            ...heightsData.map(h => [
-                                { text: h.height, fontSize: 7, alignment: 'center' },
-                                { text: h.wind, fontSize: 7, alignment: 'center' },
-                                { text: h.temp, fontSize: 7, alignment: 'center' },
-                                { text: h.pressure, fontSize: 7, alignment: 'center' },
-                                { text: h.humidity, fontSize: 7, alignment: 'center' },
-                                {
-                                    text: h.risk,
-                                    fontSize: 7,
-                                    alignment: 'center',
-                                    color: this.getRiskColor(h.riskLevel),
-                                    bold: true
-                                }
-                            ])
-                        ]
-                    },
-                    layout: {
-                        hLineWidth: (i) => i === 0 ? 1 : (i === heightsData.length + 1 ? 1 : 0),
-                        vLineWidth: () => 0,
-                        hLineColor: (i) => i === 0 ? '#cbd5e1' : '#e2e8f0',
-                        paddingLeft: () => 2,
-                        paddingRight: () => 2,
-                        paddingTop: () => 2,
-                        paddingBottom: () => 2
-                    },
-                    margin: [0, 0, 0, 3]
-                },
-
-                // Рекомендации по сегменту
-                this.createSegmentRecommendations(analyzed, segmentIndex)
-            ]
-        };
-    },
-
-    /**
-     * Извлечение данных по высотам
-     */
-    extractHeightsData(hourly) {
-        if (!hourly || hourly.length === 0) return [];
-
-        // Берём первый час для примера
-        const hour = hourly[0] || {};
-
-        // Данные по высотам (используем wind10m и wind500m как базу)
-        const wind10m = hour.wind10m || 0;
-        const wind500m = hour.wind500m || wind10m * 1.2;
-        const temp2m = hour.temp2m || 0;
-        const pressure = hour.pressure || 750; // гПа
-
-        // Конвертация гПа в мм рт.ст. (1 гПа ≈ 0.75 мм рт.ст.)
-        const pressureMm = pressure * 0.75;
-
-        return [
-            {
-                height: '250м',
-                wind: `${(wind10m * 1.1).toFixed(0)}`,
-                temp: `${(temp2m - 1.5).toFixed(0)}°`,
-                pressure: `${(pressureMm * 0.97).toFixed(0)}`,
-                humidity: `${Math.min(100, (hour.humidity || 80) * 0.95).toFixed(0)}%`,
-                risk: this.getRiskLabel(hour.risk || 'low'),
-                riskLevel: hour.risk || 'low'
-            },
-            {
-                height: '350м',
-                wind: `${(wind10m * 1.15).toFixed(0)}`,
-                temp: `${(temp2m - 2.3).toFixed(0)}°`,
-                pressure: `${(pressureMm * 0.96).toFixed(0)}`,
-                humidity: `${Math.min(100, (hour.humidity || 80) * 0.92).toFixed(0)}%`,
-                risk: this.getRiskLabel(hour.risk || 'low'),
-                riskLevel: hour.risk || 'low'
-            },
-            {
-                height: '450м',
-                wind: `${((wind10m + wind500m) / 2).toFixed(0)}`,
-                temp: `${(temp2m - 3.0).toFixed(0)}°`,
-                pressure: `${(pressureMm * 0.95).toFixed(0)}`,
-                humidity: `${Math.min(100, (hour.humidity || 80) * 0.88).toFixed(0)}%`,
-                risk: this.getRiskLabel(hour.risk || 'low'),
-                riskLevel: hour.risk || 'low'
-            },
-            {
-                height: '550м',
-                wind: `${(wind500m * 1.05).toFixed(0)}`,
-                temp: `${(temp2m - 3.8).toFixed(0)}°`,
-                pressure: `${(pressureMm * 0.94).toFixed(0)}`,
-                humidity: `${Math.min(100, (hour.humidity || 80) * 0.85).toFixed(0)}%`,
-                risk: this.getRiskLabel(hour.risk || 'low'),
-                riskLevel: hour.risk || 'low'
-            }
-        ];
-    },
-
-    /**
-     * Рекомендации по сегменту
-     */
-    createSegmentRecommendations(analyzed, segmentIndex) {
-        // Для сегмента показываем только ключевые риски
-        const hourly = analyzed.hourly || [];
-        const hour = hourly[0] || {};
-
-        const issues = [];
-
-        // Проверка обледенения
-        if (hour.icingRisk === 'high') {
-            issues.push('Обледенение');
-        } else if (hour.icingRisk === 'medium') {
-            issues.push('Возм. обледенение');
-        }
-
-        // Проверка видимости
-        if ((hour.visibility || 10) < 5) {
-            issues.push('Видимость');
-        }
-
-        // Проверка осадков
-        if ((hour.precip || 0) > 0.5) {
-            issues.push('Осадки');
-        }
-
-        // Проверка ветра
-        if ((hour.wind10m || 0) > 10) {
-            issues.push('Ветер');
-        }
-
-        if (issues.length === 0) {
-            return { text: '', margin: [0, 0, 0, 2] };
-        }
-
-        return {
-            stack: [
-                {
-                    text: issues.join(' • '),
-                    fontSize: 8,
-                    color: '#c05621',
-                    margin: [0, 0, 0, 2]
-                }
-            ],
-            background: '#fff5f5',
-            padding: 4,
-            borderRadius: 3
-        };
-    },
-
-    /**
-     * Стили документа
+     * Стили для PDF
      */
     getStyles() {
         return {
             mainTitle: {
-                fontSize: 26,
+                fontSize: 24,
                 bold: true,
-                color: '#1a202c'
+                color: '#667eea',
+                margin: [0, 0, 0, 5]
             },
             subheader: {
                 fontSize: 10,
                 color: '#718096',
-                margin: [0, 2, 0, 0]
+                italics: true
             },
-            subtitle: {
-                fontSize: 13,
-                color: '#718096',
-                margin: [0, 3, 0, 0]
-            },
-            meta: {
-                fontSize: 10,
-                color: '#4a5568',
-                margin: [0, 2, 0, 0]
-            },
-            label: {
-                fontSize: 10,
-                color: '#718096',
-                textTransform: 'uppercase',
-                letterSpacing: 0.5
-            },
-            value: {
-                fontSize: 18,
+            routeTitle: {
+                fontSize: 16,
                 bold: true,
                 color: '#2d3748',
-                margin: [0, 3, 0, 0]
-            },
-            riskBadge: {
-                fontSize: 12,
-                bold: true,
-                textTransform: 'uppercase'
+                margin: [0, 0, 0, 3]
             },
             sectionTitle: {
-                fontSize: 13,
+                fontSize: 12,
                 bold: true,
                 color: '#2d3748',
-                textTransform: 'uppercase',
-                letterSpacing: 0.5
+                margin: [0, 8, 0, 5]
             },
-            segmentTitle: {
+            label: {
+                fontSize: 9,
+                color: '#718096',
+                margin: [0, 0, 0, 3]
+            },
+            value: {
+                fontSize: 14,
+                bold: true,
+                color: '#2d3748'
+            },
+            paramLabel: {
+                fontSize: 8,
+                color: '#718096',
+                textTransform: 'uppercase',
+                margin: [0, 0, 0, 2]
+            },
+            paramValue: {
                 fontSize: 12,
                 bold: true,
                 color: '#2d3748'
             },
-            segmentDistance: {
-                fontSize: 11,
-                color: '#718096',
-                bold: true
+            meteoLabel: {
+                fontSize: 8,
+                color: 'rgba(0,0,0,0.6)',
+                textTransform: 'uppercase',
+                margin: [0, 0, 0, 2]
             },
-            tableHeader: {
+            meteoValue: {
+                fontSize: 11,
+                bold: true,
+                color: '#2d3748'
+            },
+            pilotLabel: {
+                fontSize: 8,
+                color: 'rgba(0,0,0,0.6)',
+                margin: [0, 0, 0, 2]
+            },
+            pilotValue: {
                 fontSize: 10,
                 bold: true,
-                color: '#4a5568',
-                alignment: 'center'
+                color: '#2d3748'
             },
-            tableHeaderSmall: {
-                fontSize: 9,
+            riskBadge: {
+                fontSize: 10,
                 bold: true,
-                color: '#4a5568',
+                color: '#fff',
+                padding: [8, 4, 8, 4],
                 alignment: 'center'
             },
-            note: {
-                fontSize: 11,
+            small: {
+                fontSize: 8,
+                color: '#718096'
+            },
+            meta: {
+                fontSize: 9,
+                color: '#718096'
+            },
+            footer: {
+                fontSize: 8,
                 color: '#a0aec0',
                 italics: true
             },
-            footer: {
-                fontSize: 10,
-                color: '#a0aec0',
-                margin: [0, 5, 0, 0]
+            note: {
+                fontSize: 9,
+                color: '#718096',
+                italics: true
             }
         };
     },
 
     /**
-     * Вспомогательные функции
+     * Форматирование имени файла
+     */
+    formatFilename(name) {
+        return `MIRA_${name.replace(/[^a-z0-9а-яё]/gi, '_')}_${new Date().toISOString().split('T')[0]}`;
+    },
+
+    /**
+     * Получить label для риска
      */
     getRiskLabel(risk) {
-        const labels = { 
-            low: 'НИЗКИЙ', 
-            medium: 'СРЕДНИЙ', 
-            high: 'ВЫСОКИЙ' 
-        };
-        return labels[risk] || risk;
-    },
-
-    getRiskColor(risk) {
-        const colors = { 
-            low: '#38a169', 
-            medium: '#ed8936', 
-            high: '#e53e3e' 
-        };
-        return colors[risk] || '#4a5568';
-    },
-
-    getRecommendationColor(type) {
-        const colors = {
-            critical: '#e53e3e',
-            warning: '#dd6b20',
-            info: '#3182ce',
-            success: '#38a169'
-        };
-        return colors[type] || '#4a5568';
-    },
-
-    getRecommendationsList(data) {
-        const recommendations = [];
-        const analysis = data.segmentAnalysis?.[0]?.analyzed;
-
-        if (analysis) {
-            const baseRecs = WeatherModule.generateRecommendations(analysis, data.pilotData);
-            recommendations.push(...baseRecs);
-        }
-
-        const summary = data.summary || { overallRisk: 'low' };
-        if (summary.overallRisk === 'high') {
-            recommendations.unshift({
-                type: 'critical',
-                text: 'Высокий общий риск по маршруту. Рекомендуется перенести полёт.'
-            });
-        }
-
-        return recommendations;
-    },
-
-    formatTime(isoString) {
-        if (!isoString) return '—';
-        const date = new Date(isoString);
-        return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-    },
-
-    formatFilename(name) {
-        return name
-            .replace(/[^a-zA-Z0-9а-яА-ЯёЁ\s-]/g, '')
-            .replace(/\s+/g, '_')
-            .substring(0, 50);
+        const labels = { low: 'НИЗКИЙ', medium: 'СРЕДНИЙ', high: 'ВЫСОКИЙ' };
+        return labels[risk] || '—';
     }
 };
 
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = PdfExport2PageModule;
-}
-
-// Переопределяем глобальный PdfExportModule
-window.PdfExportModule = PdfExport2PageModule;
+// Экспорт модуля
+window.PdfExport2PageModule = PdfExport2PageModule;
 console.log('✅ PdfExport2PageModule загружен');
+
+// Инициализация pdfMake после загрузки страницы
+if (typeof pdfMake !== 'undefined') {
+    PdfExport2PageModule.initPdfMake();
+} else {
+    console.log('⏳ Ожидание загрузки pdfMake...');
+    window.addEventListener('load', () => {
+        if (typeof pdfMake !== 'undefined') {
+            PdfExport2PageModule.initPdfMake();
+        }
+    });
+}

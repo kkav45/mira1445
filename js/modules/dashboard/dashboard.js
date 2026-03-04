@@ -13,11 +13,10 @@ const DashboardModule = {
      */
     tabs: [
         { id: 'meteo',    label: 'Метеопрогноз',  icon: 'fa-cloud-sun',    enabled: true },
-        { id: 'ground',   label: 'Сидя на земле', icon: 'fa-flag',         enabled: false },
-        { id: 'flight',   label: 'В полёте',      icon: 'fa-plane',        enabled: false },
+        { id: 'ground',   label: 'Сидя на земле', icon: 'fa-flag',         enabled: true },
+        { id: 'flight',   label: 'В полёте',      icon: 'fa-plane',        enabled: true },
         { id: 'segments', label: 'Сегменты',      icon: 'fa-map',          enabled: false },
         { id: 'energy',   label: 'Энергия',       icon: 'fa-battery-three-quarters', enabled: false },
-        { id: 'multiroute', label: 'Мульти-маршрут', icon: 'fa-globe',     enabled: true },
         { id: 'report',   label: 'Отчёт',         icon: 'fa-file-pdf',     enabled: true }
     ],
 
@@ -29,11 +28,6 @@ const DashboardModule = {
         this.bindEvents();
         this.updateButtonState();
         console.log('✅ DashboardModule инициализирован');
-
-        // Инициализация MultiRouteUI
-        if (typeof MultiRouteUI !== 'undefined') {
-            MultiRouteUI.init();
-        }
     },
 
     /**
@@ -139,10 +133,6 @@ const DashboardModule = {
                 body.innerHTML = DashboardTabsEnergy.render();
                 DashboardTabsEnergy.afterRender();
                 break;
-            case 'multiroute':
-                body.innerHTML = DashboardTabsMultiRoute.render();
-                DashboardTabsMultiRoute.afterRender();
-                break;
             case 'report':
                 body.innerHTML = DashboardTabsReport.render();
                 DashboardTabsReport.afterRender();
@@ -168,10 +158,10 @@ const DashboardModule = {
                     tab.enabled = hasMeteoData || hasSegments;
                     break;
                 case 'ground':
-                    tab.enabled = hasGroundData;
+                    tab.enabled = true; // Всегда доступна для ручного ввода
                     break;
                 case 'flight':
-                    tab.enabled = hasFlightData;
+                    tab.enabled = true; // Всегда доступна для ручного ввода
                     break;
                 case 'segments':
                     tab.enabled = hasSegments;

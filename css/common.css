@@ -423,56 +423,129 @@ html, body {
     background: rgba(0,0,0,0.5);
     z-index: 2000;
     justify-content: center;
-    align-items: flex-end;
+    align-items: center;
 }
 
 .modal.active { display: flex; }
 
 .modal-content {
-    background: rgba(255, 255, 255, 0.98);
-    border-radius: 20px 20px 0 0;
+    background: white;
+    border-radius: 16px;
     width: 90%;
-    max-width: 500px;
+    max-width: 600px;
     max-height: 80vh;
     overflow-y: auto;
-    animation: slideUp 0.3s ease;
+    animation: modalSlideIn 0.3s ease;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
 }
 
-@keyframes slideUp {
-    from { transform: translateY(100%); }
-    to { transform: translateY(0); }
+@keyframes modalSlideIn {
+    from {
+        transform: translateY(-50px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
 }
 
 .modal-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 16px 20px;
-    border-bottom: 1px solid rgba(0,0,0,0.1);
+    padding: 20px 24px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 16px 16px 0 0;
 }
 
 .modal-header h3 {
-    color: #2d3748;
-    font-size: 16px;
+    color: white;
+    font-size: 18px;
+    font-weight: 700;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.modal-header h3 i { color: white; }
+
+.close-modal {
+    width: 36px;
+    height: 36px;
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 20px;
+    cursor: pointer;
+    transition: background 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.close-modal:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.modal-body {
+    padding: 24px;
+}
+
+/* Настройки порогов */
+.setting-row {
     display: flex;
     align-items: center;
     gap: 8px;
+    width: 100%;
 }
 
-.modal-header h3 i { color: #667eea; }
-
-.close-modal {
-    font-size: 24px;
-    color: rgba(0,0,0,0.5);
-    cursor: pointer;
-    background: none;
-    border: none;
+.setting-row label {
+    font-size: 10px;
+    font-weight: 600;
+    color: #4a5568;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    width: 150px;
 }
 
-.close-modal:hover { color: #e53e3e; }
+.setting-row label i {
+    color: #667eea;
+    width: 12px;
+    font-size: 12px;
+    flex-shrink: 0;
+    text-align: center;
+}
 
-.modal-body {
-    padding: 20px;
+.setting-row input[type="number"] {
+    flex: 0 0 60px;
+    width: 60px;
+    padding: 8px 10px;
+    border: 2px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #2d3748;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    background: #f7fafc;
+    text-align: center;
+}
+
+.setting-row input[type="number"]:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    background: white;
+}
+
+.setting-row input[type="number"]:hover {
+    border-color: #cbd5e0;
 }
 
 /* Уведомления (Toast) */
@@ -506,25 +579,29 @@ html, body {
     position: fixed;
     top: 20px;
     right: 20px;
-    width: 48px;
-    height: 48px;
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(10px);
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     border: none;
-    border-radius: 14px;
-    color: #2d3748;
-    font-size: 18px;
+    border-radius: 8px;
+    color: white;
+    font-size: 16px;
     cursor: pointer;
     z-index: 1000;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-    transition: all 0.3s;
+    box-shadow: none;
+    transition: all 0.2s;
     display: flex;
     align-items: center;
     justify-content: center;
 }
 
+.geo-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+}
+
 .geo-btn:active { transform: scale(0.95); }
-.geo-btn i { color: #667eea; }
+.geo-btn i { color: white; }
 
 /* Spinner */
 .spinner {
@@ -583,6 +660,19 @@ html, body {
 
 /* Стили для печати / экспорта PDF */
 @media print {
+    * {
+        print-color-adjust: exact !important;
+        -webkit-print-color-adjust: exact !important;
+    }
+    
+    body, html {
+        overflow: visible !important;
+        height: auto !important;
+        position: static !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
     .print-header {
         display: block !important;
     }
@@ -595,30 +685,45 @@ html, body {
     .action-btn,
     #toast,
     .ol-popup,
-    #weatherLoading {
+    #weatherLoading,
+    .map-container,
+    .side-panel,
+    .dashboard-btn,
+    .fullscreen-btn,
+    .wizard-steps,
+    .step-navigation {
         display: none !important;
     }
 
-    #map {
-        position: relative;
-        height: 400px;
-        page-break-inside: avoid;
+    /* Показываем только модальное окно скоринга при печати */
+    .scoring-modal {
+        position: static !important;
+        display: block !important;
+        background: white !important;
+    }
+    
+    .scoring-modal-content,
+    .scoring-modal-body {
+        overflow: visible !important;
+        position: static !important;
+        height: auto !important;
+        max-height: none !important;
     }
 
-    .panel-content {
-        overflow: visible;
+    .scoring-accordion-content {
+        display: block !important;
+        height: auto !important;
+        overflow: visible !important;
     }
 
-    .chart-container {
+    .chart-container,
+    .scoring-factor,
+    .scoring-recommendations {
         page-break-inside: avoid;
     }
 
     .recommendations-block {
         page-break-inside: avoid;
-    }
-
-    body, html {
-        overflow: visible;
     }
 }
 

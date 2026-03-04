@@ -1,25 +1,50 @@
 /**
- * Вкладка дашборда: СЕГМЕНТЫ 🗺️
- * Детализация по сегментам маршрута
+ * Вкладка дашборда: СЕГМЕНТЫ 🗺️ (ОБНОВЛЁННАЯ v0.6.0 — с поддержкой маршрутов)
+ * Детализация по сегментам маршрута для каждого маршрута
  */
 
 const DashboardTabsSegments = {
+    /**
+     * Активный маршрут (для выбора маршрута)
+     */
+    activeRoute: 'all',  // 'all' или ID маршрута
+
     selectedSegmentIndex: 0,
 
     render() {
-        const segments = typeof RouteModule !== 'undefined' && RouteModule.segments
-            ? RouteModule.segments
+        // Получаем маршруты из RouteModule
+        const routes = typeof RouteModule !== 'undefined' && RouteModule.savedRoutes
+            ? RouteModule.savedRoutes
             : [];
 
-        const segmentAnalysis = typeof RouteModule !== 'undefined' && RouteModule.segmentAnalysis
-            ? RouteModule.segmentAnalysis
-            : [];
+        // Получаем данные для активного маршрута
+        let segments = [];
+        let segmentAnalysis = [];
+
+        if (this.activeRoute !== 'all' && RouteModule.routeAnalysisData?.[this.activeRoute]) {
+            // Используем сохранённые данные для конкретного маршрута
+            const routeData = RouteModule.routeAnalysisData[this.activeRoute];
+            segments = routeData.segments || [];
+            segmentAnalysis = routeData.segmentAnalysis || [];
+            const totalDist = segments.reduce((sum, s) => sum + (s.distance || 0), 0).toFixed(1);
+            console.log('📍 Сегменты для маршрута', this.activeRoute, ':', segments.length, 'сегментов,', totalDist, 'км');
+        } else {
+            // Используем текущие данные (для последнего проанализированного маршрута или 'all')
+            segments = typeof RouteModule !== 'undefined' && RouteModule.segments
+                ? RouteModule.segments
+                : [];
+            segmentAnalysis = typeof RouteModule !== 'undefined' && RouteModule.segmentAnalysis
+                ? RouteModule.segmentAnalysis
+                : [];
+            const totalDist = segments.reduce((sum, s) => sum + (s.distance || 0), 0).toFixed(1);
+            console.log('📍 Сегменты (all/последний маршрут):', segments.length, 'сегментов,', totalDist, 'км');
+        }
 
         if (!segments || segments.length === 0) {
             return this.renderPlaceholder();
         }
 
-        return this.renderContent(segments, segmentAnalysis);
+        return this.renderContent(segments, segmentAnalysis, routes);
     },
 
     renderPlaceholder() {
@@ -37,11 +62,34 @@ const DashboardTabsSegments = {
         `;
     },
 
-    renderContent(segments, segmentAnalysis) {
-        const totalDistance = Math.round(segments.reduce((sum, s) => sum + (s.distance || 0), 0) * 10) / 10;
+    renderContent(segments, segmentAnalysis, routes = []) {
+        // Дистанция сегментов — это ось маршрута
+        const axisDistance = Math.round(segments.reduce((sum, s) => sum + (s.distance || 0), 0) * 10) / 10;
+        const totalDistance = Math.round(axisDistance * 2.5 * 10) / 10; // ×2.5 полная
         const avgRisk = this.calculateAverageRisk(segmentAnalysis);
 
+        // Генерируем вкладки для каждого маршрута
+        const routeTabs = routes.length > 0 ? `
+            <div class="dashboard-subtabs" style="margin: 20px 0; display: flex; gap: 8px; flex-wrap: wrap; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px;">
+                <button class="dashboard-subtab ${this.activeRoute === 'all' ? 'active' : ''}"
+                        onclick="DashboardTabsSegments.setActiveRoute('all')">
+                    📊 Все маршруты
+                </button>
+                ${routes.map((route) => {
+                    const hasAnalysis = RouteModule.routeAnalysisData?.[route.id] ? '✅' : '⏳';
+                    return `
+                        <button class="dashboard-subtab ${this.activeRoute === route.id ? 'active' : ''}"
+                                onclick="DashboardTabsSegments.setActiveRoute('${route.id}')">
+                            ${hasAnalysis} ${route.name}
+                        </button>
+                    `;
+                }).join('')}
+            </div>
+        ` : '';
+
         return `
+            ${routeTabs}
+
             <!-- Сводка -->
             <div class="dashboard-card">
                 <div class="dashboard-card-title">
@@ -56,8 +104,13 @@ const DashboardTabsSegments = {
                     </div>
                     <div class="dashboard-energy-card">
                         <div class="dashboard-energy-card-icon">📏</div>
+                        <div class="dashboard-energy-card-value">${axisDistance} км</div>
+                        <div class="dashboard-energy-card-label">Ось маршрута</div>
+                    </div>
+                    <div class="dashboard-energy-card">
+                        <div class="dashboard-energy-card-icon">📍</div>
                         <div class="dashboard-energy-card-value">${totalDistance} км</div>
-                        <div class="dashboard-energy-card-label">Дистанция</div>
+                        <div class="dashboard-energy-card-label">Полная (×2.5)</div>
                     </div>
                     <div class="dashboard-energy-card">
                         <div class="dashboard-energy-card-icon">⏱️</div>
@@ -84,8 +137,8 @@ const DashboardTabsSegments = {
                         const risk = analysis?.riskLevel || 'low';
                         const riskColor = risk === 'low' ? '#38a169' : risk === 'medium' ? '#d69e2e' : '#ef4444';
                         return `
-                            <button class="dashboard-segment-btn ${i === this.selectedSegmentIndex ? 'active' : ''}" 
-                                    data-segment="${i}" 
+                            <button class="dashboard-segment-btn ${i === this.selectedSegmentIndex ? 'active' : ''}"
+                                    data-segment="${i}"
                                     style="padding: 8px 16px; border: 2px solid ${riskColor}; border-radius: 8px; background: ${i === this.selectedSegmentIndex ? riskColor : 'white'}; color: ${i === this.selectedSegmentIndex ? 'white' : riskColor}; cursor: pointer; font-weight: 600;">
                                 С${i + 1}
                             </button>
@@ -98,6 +151,28 @@ const DashboardTabsSegments = {
             </div>
 
             <!-- Графики по сегментам -->
+            ${this.renderSegmentCharts(segments, segmentAnalysis)}
+        `;
+    },
+
+    /**
+     * Установка активного маршрута (НОВОЕ)
+     */
+    setActiveRoute(routeId) {
+        this.activeRoute = routeId;
+        this.selectedSegmentIndex = 0;
+        const container = document.getElementById('dashboardBody');
+        if (container) {
+            container.innerHTML = this.render();
+            this.afterRender();
+        }
+    },
+
+    /**
+     * Генерация графиков по сегментам
+     */
+    renderSegmentCharts(segments, segmentAnalysis) {
+        return `
             <div class="dashboard-charts-grid">
                 <div class="dashboard-chart-container">
                     <div class="dashboard-chart-title">
@@ -207,7 +282,8 @@ const DashboardTabsSegments = {
 
             const riskClass = analysis?.riskLevel === 'low' ? 'low' : analysis?.riskLevel === 'medium' ? 'medium' : 'high';
             const riskLabel = analysis?.riskLevel === 'low' ? '🟢' : analysis?.riskLevel === 'medium' ? '🟡' : '🔴';
-            const distance = Math.round((s.distance || 0) * 10) / 10;
+            const distance = s.distance || 0;  // Ось
+            const distanceTotal = s.distanceTotal || Math.round(distance * 2.5 * 10) / 10;  // Полная
             const wind10m = Math.round((firstHour.wind10m || firstHour.wind || 0) * 10) / 10;
             const temp2m = Math.round((firstHour.temp2m || firstHour.temp || 0) * 10) / 10;
             const precip = Math.round((firstHour.precip || firstHour.precipitation || 0) * 10) / 10;
@@ -218,7 +294,7 @@ const DashboardTabsSegments = {
                 <tr>
                     <td><strong>С${i + 1}</strong></td>
                     <td>${riskLabel}</td>
-                    <td>${distance} км</td>
+                    <td>${distance} / ${distanceTotal} км</td>
                     <td>${wind10m} м/с</td>
                     <td>${temp2m > 0 ? '+' : ''}${temp2m}°C</td>
                     <td>${precip} мм/ч</td>
@@ -234,7 +310,7 @@ const DashboardTabsSegments = {
                     <tr>
                         <th>Сегмент</th>
                         <th>Риск</th>
-                        <th>Дистанция</th>
+                        <th>Дистанция (ось / полная)</th>
                         <th>Ветер</th>
                         <th>Темп.</th>
                         <th>Осадки</th>

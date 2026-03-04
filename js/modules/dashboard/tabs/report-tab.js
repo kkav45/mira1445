@@ -1,231 +1,276 @@
-/**
+﻿/**
  * Вкладка дашборда: ОТЧЁТ 📄
- * Формирование и экспорт PDF-отчёта
+ * Автоматическое формирование отчёта по всем маршрутам
  */
 
 const DashboardTabsReport = {
-    selectedSections: {
-        meteo: true,
-        segments: true,
-        ground: true,
-        flight: true,
-        energy: true,
-        charts: true
-    },
+    // Текущие данные отчёта
+    currentReportData: null,
 
     render() {
         return `
             <div class="dashboard-card">
                 <div class="dashboard-card-title">
                     <i class="fas fa-file-pdf" style="color: #f56565;"></i>
-                    Формирование отчёта PDF
+                    Отчёт по маршрутам
                 </div>
-
-                <!-- Разделы отчёта -->
-                <div style="margin-bottom: 20px;">
-                    <div style="font-size: 14px; font-weight: 600; color: #2d3748; margin-bottom: 12px;">
-                        <i class="fas fa-list"></i> Разделы отчёта
-                    </div>
-                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px;">
-                        ${this.renderCheckbox('meteo', 'Метеопрогноз (Open-Meteo)', 'fa-cloud-sun')}
-                        ${this.renderCheckbox('segments', 'Таблица по сегментам', 'fa-map')}
-                        ${this.renderCheckbox('ground', 'Наблюдения "Сидя на земле"', 'fa-flag')}
-                        ${this.renderCheckbox('flight', 'Наблюдения "В полёте"', 'fa-plane')}
-                        ${this.renderCheckbox('energy', 'Энергорасчёт', 'fa-battery-three-quarters')}
-                        ${this.renderCheckbox('charts', 'Графики Plotly', 'fa-chart-line')}
-                    </div>
-                </div>
-
-                <!-- Кнопки действий -->
-                <div style="display: flex; gap: 12px;">
-                    <button class="dashboard-back-btn" onclick="DashboardTabsReport.generateReport()" style="flex: 1; justify-content: center;">
-                        <i class="fas fa-clipboard-list"></i> Сформировать отчёт
-                    </button>
-                    <button class="dashboard-back-btn" onclick="DashboardTabsReport.downloadPDF()" style="flex: 1; justify-content: center;">
-                        <i class="fas fa-download"></i> Скачать PDF
-                    </button>
-                </div>
-            </div>
-
-            <!-- Предпросмотр -->
-            <div class="dashboard-card">
-                <div class="dashboard-card-title">
-                    <i class="fas fa-eye" style="color: #667eea;"></i>
-                    Предпросмотр
-                </div>
-                <div id="dashboardReportPreview" style="background: #f7fafc; padding: 20px; border-radius: 10px; min-height: 200px;">
+                <div id="dashboardReportPreview" style="background: #f7fafc; padding: 20px; border-radius: 10px;">
                     ${this.renderPreview()}
                 </div>
             </div>
 
-            <!-- Статистика -->
-            <div class="dashboard-card">
-                <div class="dashboard-card-title">
-                    <i class="fas fa-chart-pie" style="color: #48bb78;"></i>
-                    Статистика данных
-                </div>
-                <div class="dashboard-energy-cards">
-                    ${this.renderStatCard('Часов прогноза', this.getForecastHoursCount(), 'fa-clock')}
-                    ${this.renderStatCard('Сегментов', this.getSegmentsCount(), 'fa-map')}
-                    ${this.renderStatCard('Наблюдений', this.getObservationsCount(), 'fa-clipboard-list')}
-                    ${this.renderStatCard('Статус', this.getEnergyStatus(), 'fa-battery-full')}
-                </div>
-            </div>
-        `;
-    },
-
-    renderCheckbox(id, label, icon) {
-        const checked = this.selectedSections[id] ? 'checked' : '';
-        return `
-            <label style="display: flex; align-items: center; gap: 10px; padding: 12px; background: #f7fafc; border-radius: 8px; cursor: pointer;">
-                <input type="checkbox" id="reportSection_${id}" ${checked} onchange="DashboardTabsReport.toggleSection('${id}')" style="width: 18px; height: 18px;">
-                <i class="fas ${icon}" style="color: #667eea;"></i>
-                <span style="font-size: 13px; font-weight: 500; color: #2d3748;">${label}</span>
-            </label>
-        `;
-    },
-
-    renderStatCard(label, value, icon) {
-        return `
-            <div class="dashboard-energy-card">
-                <div class="dashboard-energy-card-icon">${icon}</div>
-                <div class="dashboard-energy-card-value">${value}</div>
-                <div class="dashboard-energy-card-label">${label}</div>
+            <!-- Кнопки действий -->
+            <div style="display: flex; gap: 12px; margin-top: 16px;">
+                <button class="dashboard-back-btn" onclick="DashboardTabsReport.printReport()" style="flex: 1; justify-content: center; background: linear-gradient(135deg, #4299e1 0%, #3182ce 100%);">
+                    <i class="fas fa-print"></i> Печать
+                </button>
+                <button class="dashboard-back-btn" onclick="DashboardTabsReport.downloadPDF()" style="flex: 1; justify-content: center; background: linear-gradient(135deg, #f56565 0%, #c53030 100%);">
+                    <i class="fas fa-download"></i> Скачать PDF
+                </button>
             </div>
         `;
     },
 
     renderPreview() {
-        const sections = [];
-
-        if (this.selectedSections.meteo) sections.push('🌤️ Метеопрогноз');
-        if (this.selectedSections.segments) sections.push('🗺️ Сегменты');
-        if (this.selectedSections.ground) sections.push('🚩 Сидя на земле');
-        if (this.selectedSections.flight) sections.push('✈️ В полёте');
-        if (this.selectedSections.energy) sections.push('🔋 Энергия');
-        if (this.selectedSections.charts) sections.push('📈 Графики');
-
-        if (sections.length === 0) {
-            return '<p style="color: #718096; text-align: center;">Выберите разделы для формирования отчёта</p>';
-        }
-
-        return `
-            <div style="display: flex; flex-wrap: wrap; gap: 8px;">
-                ${sections.map(s => `
-                    <span style="padding: 8px 14px; background: white; border-radius: 8px; font-size: 13px; border: 1px solid #e2e8f0;">${s}</span>
-                `).join('')}
-            </div>
-            <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #e2e8f0; font-size: 12px; color: #718096;">
-                <i class="fas fa-info-circle"></i> Отчёт будет сформирован из ${sections.length} раздел(а/ов)
-            </div>
-        `;
-    },
-
-    toggleSection(sectionId) {
-        this.selectedSections[sectionId] = !this.selectedSections[sectionId];
-
-        // Обновление предпросмотра
-        const preview = document.getElementById('dashboardReportPreview');
-        if (preview) {
-            preview.innerHTML = this.renderPreview();
-        }
-
-        // Обновление статистики
-        this.updateStats();
-    },
-
-    getForecastHoursCount() {
-        const data = typeof WeatherModule !== 'undefined' && WeatherModule.data
-            ? WeatherModule.data
-            : null;
-        return data && data.hourly ? data.hourly.length : 0;
-    },
-
-    getSegmentsCount() {
-        const segments = typeof RouteModule !== 'undefined' && RouteModule.segments
-            ? RouteModule.segments
+        // Получаем полный отчёт по всем маршрутам
+        const fullReport = typeof RouteModule !== 'undefined' && RouteModule.getFullReport
+            ? RouteModule.getFullReport()
             : [];
-        return segments.length;
+
+        if (fullReport.length === 0) {
+            return `
+                <div style="text-align: center; padding: 40px; color: rgba(0,0,0,0.5);">
+                    <i class="fas fa-folder-open" style="font-size: 48px; margin-bottom: 16px; opacity: 0.3;"></i>
+                    <p>Нет данных для отчёта. Проведите анализ маршрутов.</p>
+                </div>
+            `;
+        }
+
+        // Формируем отчёт по каждому маршруту
+        return fullReport.map(report => {
+            const { route, analysisDate, segmentAnalysis, pilotData, meteorology, flightWindows, recommendations } = report;
+            const dateStr = analysisDate ? new Date(analysisDate).toLocaleDateString('ru-RU', { 
+                day: 'numeric', month: 'long', year: 'numeric' 
+            }) : '—';
+
+            const overallRisk = segmentAnalysis?.[0]?.riskLevel || 'low';
+            const riskLabels = { low: 'НИЗКИЙ', medium: 'СРЕДНИЙ', high: 'ВЫСОКИЙ' };
+            const riskColors = { low: '#38a169', medium: '#ed8936', high: '#e53e3e' };
+
+            // Метеоданные
+            const hourly = meteorology?.hourly?.[0];
+            const temp = hourly?.temp2m !== undefined ? `${hourly.temp2m >= 0 ? '+' : ''}${Math.round(hourly.temp2m)}°C` : '—';
+            const wind = hourly?.wind10m !== undefined ? `${hourly.wind10m.toFixed(1)} м/с` : '—';
+            const visibility = hourly?.visibility !== undefined ? `${hourly.visibility} км` : '—';
+            const precip = hourly?.precip !== undefined ? `${hourly.precip.toFixed(1)} мм` : '—';
+
+            // Окна безопасности
+            const safeWindows = (flightWindows || []).filter(w => w.risk === 'low');
+
+            return `
+                <div class="route-report-block" style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
+                            border-radius: 12px; padding: 16px; margin-bottom: 24px; border: 1px solid rgba(102, 126, 234, 0.15);">
+                    
+                    <!-- Заголовок маршрута -->
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 2px solid rgba(102, 126, 234, 0.2);">
+                        <div>
+                            <div style="font-size: 18px; font-weight: 700; color: #2d3748; margin-bottom: 4px;">
+                                <i class="fas fa-route" style="color: #667eea;"></i> ${route.name}
+                            </div>
+                            <div style="font-size: 12px; color: rgba(0,0,0,0.6);">
+                                📅 ${dateStr}
+                            </div>
+                        </div>
+                        <span style="padding: 6px 12px; background: ${riskColors[overallRisk]}; color: #fff; border-radius: 6px; font-size: 12px; font-weight: 600;">
+                            ${riskLabels[overallRisk] || '—'} РИСК
+                        </span>
+                    </div>
+
+                    <!-- Параметры маршрута -->
+                    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px;">
+                        <div style="text-align: center; padding: 12px; background: rgba(255,255,255,0.5); border-radius: 8px;">
+                            <div style="font-size: 10px; color: rgba(0,0,0,0.6); text-transform: uppercase;">Длина</div>
+                            <div style="font-size: 18px; font-weight: 700; color: #2d3748;">${route.distance?.toFixed(1) || 0} км</div>
+                        </div>
+                        <div style="text-align: center; padding: 12px; background: rgba(255,255,255,0.5); border-radius: 8px;">
+                            <div style="font-size: 10px; color: rgba(0,0,0,0.6); text-transform: uppercase;">Время</div>
+                            <div style="font-size: 18px; font-weight: 700; color: #2d3748;">${route.flightTime || 0} мин</div>
+                        </div>
+                        <div style="text-align: center; padding: 12px; background: rgba(255,255,255,0.5); border-radius: 8px;">
+                            <div style="font-size: 10px; color: rgba(0,0,0,0.6); text-transform: uppercase;">Сегменты</div>
+                            <div style="font-size: 18px; font-weight: 700; color: #2d3748;">${segmentAnalysis?.length || 0}</div>
+                        </div>
+                        <div style="text-align: center; padding: 12px; background: rgba(255,255,255,0.5); border-radius: 8px;">
+                            <div style="font-size: 10px; color: rgba(0,0,0,0.6); text-transform: uppercase;">Тип</div>
+                            <div style="font-size: 14px; font-weight: 600; color: #2d3748;">${route.type === 'kml' ? 'KML' : 'Ручной'}</div>
+                        </div>
+                    </div>
+
+                    <!-- Метеоанализ -->
+                    <div style="margin-bottom: 16px;">
+                        <div style="font-size: 14px; font-weight: 700; color: #2d3748; margin-bottom: 10px;">
+                            <i class="fas fa-cloud-sun" style="color: #f59e0b;"></i> Метеоанализ
+                        </div>
+                        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
+                            <div style="padding: 10px; background: rgba(59, 130, 246, 0.1); border-radius: 8px; border: 1px solid rgba(59, 130, 246, 0.2);">
+                                <div style="font-size: 10px; color: rgba(0,0,0,0.6); text-transform: uppercase;">🌡️ Температура</div>
+                                <div style="font-size: 16px; font-weight: 700; color: #2d3748;">${temp}</div>
+                            </div>
+                            <div style="padding: 10px; background: rgba(16, 185, 129, 0.1); border-radius: 8px; border: 1px solid rgba(16, 185, 129, 0.2);">
+                                <div style="font-size: 10px; color: rgba(0,0,0,0.6); text-transform: uppercase;">💨 Ветер</div>
+                                <div style="font-size: 16px; font-weight: 700; color: #2d3748;">${wind}</div>
+                            </div>
+                            <div style="padding: 10px; background: rgba(245, 158, 11, 0.1); border-radius: 8px; border: 1px solid rgba(245, 158, 11, 0.2);">
+                                <div style="font-size: 10px; color: rgba(0,0,0,0.6); text-transform: uppercase;">👁️ Видимость</div>
+                                <div style="font-size: 16px; font-weight: 700; color: #2d3748;">${visibility}</div>
+                            </div>
+                            <div style="padding: 10px; background: rgba(139, 92, 246, 0.1); border-radius: 8px; border: 1px solid rgba(139, 92, 246, 0.2);">
+                                <div style="font-size: 10px; color: rgba(0,0,0,0.6); text-transform: uppercase;">🌧️ Осадки</div>
+                                <div style="font-size: 16px; font-weight: 700; color: #2d3748;">${precip}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Данные пилота -->
+                    ${pilotData ? `
+                        <div style="margin-bottom: 16px;">
+                            <div style="font-size: 14px; font-weight: 700; color: #2d3748; margin-bottom: 10px;">
+                                <i class="fas fa-user-pilot" style="color: #38a169;"></i> Данные пилота
+                            </div>
+                            <div style="padding: 12px; background: rgba(56, 161, 105, 0.1); border-radius: 8px; border: 1px solid rgba(56, 161, 105, 0.2);">
+                                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
+                                    <div>
+                                        <div style="font-size: 10px; color: rgba(0,0,0,0.6);">📍 Координаты</div>
+                                        <div style="font-size: 13px; font-weight: 600; color: #2d3748;">${pilotData.lat?.toFixed(4) || '—'}, ${pilotData.lon?.toFixed(4) || '—'}</div>
+                                    </div>
+                                    <div>
+                                        <div style="font-size: 10px; color: rgba(0,0,0,0.6);">💨 Ветер</div>
+                                        <div style="font-size: 13px; font-weight: 600; color: #2d3748;">${pilotData.windSpeed || '—'} м/с ${pilotData.windDir ? '(' + pilotData.windDir + '°)' : ''}</div>
+                                    </div>
+                                    <div>
+                                        <div style="font-size: 10px; color: rgba(0,0,0,0.6);">🌡️ Температура</div>
+                                        <div style="font-size: 13px; font-weight: 600; color: #2d3748;">${pilotData.temp || '—'}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    ` : ''}
+
+                    <!-- Окна безопасности -->
+                    <div style="margin-bottom: 16px;">
+                        <div style="font-size: 14px; font-weight: 700; color: #2d3748; margin-bottom: 10px;">
+                            <i class="fas fa-clock" style="color: #10b981;"></i> Окна безопасности
+                        </div>
+                        ${safeWindows.length > 0 ? `
+                            <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                                ${safeWindows.map(w => `
+                                    <span style="padding: 6px 12px; background: rgba(56, 161, 105, 0.15); border: 1px solid rgba(56, 161, 105, 0.3); border-radius: 6px; font-size: 12px; color: #276749; font-weight: 600;">
+                                        ${w.start} – ${w.end} (${w.duration} ч)
+                                    </span>
+                                `).join('')}
+                            </div>
+                        ` : `
+                            <div style="padding: 10px; background: rgba(237, 137, 54, 0.1); border-radius: 8px; font-size: 12px; color: #c05621;">
+                                <i class="fas fa-exclamation-triangle"></i> Безопасные окна не найдены
+                            </div>
+                        `}
+                    </div>
+
+                    <!-- Рекомендации -->
+                    <div style="margin-bottom: 16px;">
+                        <div style="font-size: 14px; font-weight: 700; color: #2d3748; margin-bottom: 10px;">
+                            <i class="fas fa-clipboard-list" style="color: #667eea;"></i> Рекомендации
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 8px;">
+                            ${recommendations?.length > 0 ? recommendations.map(rec => `
+                                <div style="padding: 10px 12px; background: ${rec.type === 'success' ? 'rgba(56, 161, 105, 0.1)' : rec.type === 'warning' ? 'rgba(237, 137, 54, 0.1)' : rec.type === 'critical' ? 'rgba(229, 62, 62, 0.1)' : 'rgba(59, 130, 246, 0.1)'}; 
+                                            border-left: 3px solid ${rec.type === 'success' ? '#38a169' : rec.type === 'warning' ? '#ed8936' : rec.type === 'critical' ? '#e53e3e' : '#3b82f6'}; 
+                                            border-radius: 6px; font-size: 12px; color: #2d3748;">
+                                    <i class="fas ${rec.icon}" style="color: ${rec.type === 'success' ? '#38a169' : rec.type === 'warning' ? '#ed8936' : rec.type === 'critical' ? '#e53e3e' : '#3b82f6'};"></i>
+                                    <span style="margin-left: 8px;">${rec.text}</span>
+                                </div>
+                            `).join('') : `
+                                <div style="padding: 10px; background: rgba(56, 161, 105, 0.1); border-radius: 8px; font-size: 12px; color: #276749;">
+                                    <i class="fas fa-check-circle"></i> Все параметры в норме
+                                </div>
+                            `}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
     },
 
-    getObservationsCount() {
-        const pilotObs = typeof PilotObservationsModule !== 'undefined'
-            ? PilotObservationsModule
-            : null;
-
-        if (!pilotObs) return 0;
-
-        const ground = pilotObs.getGroundObservations ? pilotObs.getGroundObservations().length : 0;
-        const flight = pilotObs.getFlightObservations ? pilotObs.getFlightObservations().length : 0;
-
-        return ground + flight;
-    },
-
-    getEnergyStatus() {
-        const energy = typeof EnergyModule !== 'undefined' && EnergyModule.result
-            ? EnergyModule.result
-            : null;
-
-        if (!energy) return '—';
-
-        const statusMap = {
-            allowed: '✅ Разрешён',
-            warning: '⚠️ Ограничения',
-            forbidden: '❌ Запрещён'
-        };
-
-        return statusMap[energy.status] || '—';
-    },
-
-    updateStats() {
-        // Обновление статистики
-        const stats = [
-            { id: 'reportStat1', value: this.getForecastHoursCount() },
-            { id: 'reportStat2', value: this.getSegmentsCount() },
-            { id: 'reportStat3', value: this.getObservationsCount() },
-            { id: 'reportStat4', value: this.getEnergyStatus() }
-        ];
-
-        stats.forEach(stat => {
-            const el = document.getElementById(stat.id);
-            if (el) {
-                el.textContent = stat.value;
+    /**
+     * Печать отчёта
+     */
+    printReport() {
+        console.log('🖨️ Печать отчёта...');
+        
+        // Раскрываем аккордеон перед печатью
+        const factorsContent = document.getElementById('factorsContent');
+        const factorsIcon = document.getElementById('factorsIcon');
+        const wasHidden = factorsContent && factorsContent.style.display === 'none';
+        
+        if (wasHidden) {
+            factorsContent.style.display = 'block';
+            factorsIcon.classList.add('rotated');
+        }
+        
+        // Небольшая задержка для отображения контента
+        setTimeout(() => {
+            window.print();
+            
+            // Возвращаем аккордеон в исходное состояние
+            if (wasHidden) {
+                setTimeout(() => {
+                    factorsContent.style.display = 'none';
+                    factorsIcon.classList.remove('rotated');
+                }, 500);
             }
-        });
+        }, 300);
     },
 
-    generateReport() {
-        console.log('📋 Формирование отчёта...', this.selectedSections);
-
-        // Вызов существующей функции экспорта
-        if (typeof PdfExportModule !== 'undefined') {
-            PdfExportModule.generatePDF(this.selectedSections);
-            showToast('✅ Отчёт сформирован');
-        } else {
-            showToast('⚠️ Модуль экспорта не загружен');
-        }
-    },
-
+    /**
+     * Скачивание PDF
+     */
     downloadPDF() {
-        console.log('💾 Скачивание PDF...');
+        console.log('📄 PDF Export...');
 
-        if (typeof PdfExportModule !== 'undefined') {
-            PdfExportModule.downloadPDF();
-            showToast('✅ PDF загружен');
+        const fullReport = typeof RouteModule !== 'undefined' && RouteModule.getFullReport
+            ? RouteModule.getFullReport()
+            : [];
+
+        const pilotData = typeof WizardModule !== 'undefined' ? WizardModule.stepData?.pilotData : null;
+
+        if (fullReport.length === 0) {
+            alert('Нет данных для экспорта');
+            return;
+        }
+
+        const PdfModule = window.PdfExportModule || window.PdfExport2PageModule;
+
+        if (typeof PdfModule !== 'undefined' && typeof PdfModule.generateReport === 'function') {
+            PdfModule.generateReport({
+                routes: fullReport,
+                pilotData: pilotData
+            });
         } else {
-            showToast('⚠️ Модуль экспорта не загружен');
+            alert('PDF модуль не загружен');
         }
     },
 
+    /**
+     * После отображения (пустая функция для совместимости)
+     */
     afterRender() {
-        this.updateStats();
+        // Не требуется для нового отчёта
     }
 };
 
-// Helper function (если не определена)
-if (typeof showToast === 'undefined') {
-    function showToast(message) {
-        console.log('📢', message);
-        alert(message);
-    }
-}
+// Экспорт модуля
+window.DashboardTabsReport = DashboardTabsReport;
+console.log('✅ DashboardTabsReport загружен');
+
+// После отображения
+DashboardTabsReport.afterRender = function() {};

@@ -35,6 +35,8 @@ const MultiRouteMapModule = {
      * Создание слоя для точек взлёта
      */
     createTakeoffLayer() {
+        console.log('🗺️ createTakeoffLayer вызван, this.map:', this.map);
+        
         const source = new ol.source.Vector();
 
         this.takeoffLayer = new ol.layer.Vector({
@@ -60,6 +62,7 @@ const MultiRouteMapModule = {
         });
 
         this.map.addLayer(this.takeoffLayer);
+        console.log('✅ takeoffLayer создан и добавлен на карту:', this.takeoffLayer);
     },
 
     /**
@@ -121,7 +124,19 @@ const MultiRouteMapModule = {
      * Отобразить точку взлёта
      */
     displayTakeoffPoint(point) {
-        if (!this.takeoffLayer) return;
+        console.log('🗺️ displayTakeoffPoint вызван:', point);
+        console.log('  - this.takeoffLayer:', this.takeoffLayer);
+        console.log('  - this.map:', this.map);
+        
+        if (!this.takeoffLayer) {
+            console.error('❌ takeoffLayer не создан!');
+            return;
+        }
+        
+        if (!this.map) {
+            console.error('❌ map не инициализирован!');
+            return;
+        }
 
         const feature = new ol.Feature({
             geometry: new ol.geom.Point(ol.proj.fromLonLat([point.lon, point.lat])),
@@ -131,7 +146,7 @@ const MultiRouteMapModule = {
         });
 
         this.takeoffLayer.getSource().addFeature(feature);
-        console.log('🗺️ Точка взлёта отображена:', point.name);
+        console.log('✅ Точка взлёта отображена:', point.name, 'на слое:', this.takeoffLayer);
     },
 
     /**

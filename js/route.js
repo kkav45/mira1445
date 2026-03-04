@@ -10,6 +10,88 @@ const RouteModule = {
     segmentLengthKm: 10,
 
     /**
+     * Хранилище данных анализа по маршрутам: { [routeId]: { segments, segmentAnalysis } }
+     */
+    routeAnalysisData: {},
+
+    /**
+     * Получение сохранённых маршрутов (геттер)
+     */
+    get savedRoutes() {
+        return this.getSavedRoutes();
+    },
+
+    /**
+     * Инициализация модуля
+     */
+    init() {
+        this.loadAnalysisData();
+        console.log('✅ RouteModule инициализирован, загружено анализов:', Object.keys(this.routeAnalysisData).length);
+    },
+
+    /**
+     * Обновление состояния кнопки «Анализ»
+     */
+    updateAnalyzeButtonState() {
+        const analyzeBtn = document.getElementById('getWeatherBtn');
+        console.log('🔍 updateAnalyzeButtonState:', analyzeBtn);
+
+        if (analyzeBtn) {
+            const routes = Storage.getSavedRoutes();
+            const hasRoutes = routes && routes.length > 0;
+            console.log('📦 Маршрутов в Storage:', routes?.length, 'hasRoutes:', hasRoutes);
+            console.log('📦 Маршруты:', routes);
+
+            if (hasRoutes) {
+                analyzeBtn.disabled = false;
+                analyzeBtn.classList.remove('disabled');
+                analyzeBtn.style.opacity = '';
+                analyzeBtn.style.cursor = '';
+                
+                // Принудительно показываем кнопку
+                analyzeBtn.style.display = 'flex';
+                analyzeBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                
+                console.log('✅ Кнопка «Анализ» активирована (маршрутов:', routes.length + ')');
+            } else {
+                analyzeBtn.disabled = true;
+                analyzeBtn.classList.add('disabled');
+                console.log('🚫 Кнопка «Анализ» деактивирована (нет маршрутов)');
+            }
+        } else {
+            console.error('❌ Кнопка getWeatherBtn не найдена');
+        }
+    },
+
+    /**
+     * Загрузка данных анализа из localStorage
+     */
+    loadAnalysisData() {
+        const saved = localStorage.getItem('mira_route_analysis_data');
+        if (saved) {
+            try {
+                this.routeAnalysisData = JSON.parse(saved);
+                console.log('📦 Загружено данных анализа:', Object.keys(this.routeAnalysisData).length);
+            } catch (e) {
+                console.error('Ошибка загрузки данных анализа:', e);
+                this.routeAnalysisData = {};
+            }
+        }
+    },
+
+    /**
+     * Сохранение данных анализа в localStorage
+     */
+    saveAnalysisData() {
+        try {
+            localStorage.setItem('mira_route_analysis_data', JSON.stringify(this.routeAnalysisData));
+            console.log('💾 Данные анализа сохранены в localStorage');
+        } catch (e) {
+            console.error('Ошибка сохранения данных анализа:', e);
+        }
+    },
+
+    /**
      * Создание маршрута из точек
      */
     createRoute(points, name = null) {
@@ -73,11 +155,13 @@ const RouteModule = {
             const dist = Utils.calculateDistance(prev.lat, prev.lon, curr.lat, curr.lon);
 
             if (currentDistance + dist >= this.segmentLengthKm) {
-                // Завершаем сегмент с текущей дистанцией
+                // Завершаем сегмент
+                const segmentDist = currentDistance + dist;
                 this.segments.push({
-                    points: [...currentSegment, curr],  // Включаем текущую точку
+                    points: [...currentSegment, curr],
                     center: this.getSegmentCenter([...currentSegment, curr]),
-                    distance: currentDistance + dist  // Включаем текущую дистанцию
+                    distance: Math.round(segmentDist * 10) / 10,  // Ось маршрута
+                    distanceTotal: Math.round(segmentDist * 2.5 * 10) / 10  // Полная (×2.5)
                 });
 
                 // Начинаем новый
@@ -94,7 +178,8 @@ const RouteModule = {
             this.segments.push({
                 points: [...currentSegment],
                 center: this.getSegmentCenter(currentSegment),
-                distance: currentDistance
+                distance: Math.round(currentDistance * 10) / 10,  // Ось маршрута
+                distanceTotal: Math.round(currentDistance * 2.5 * 10) / 10  // Полная (×2.5)
             });
         }
 
@@ -268,15 +353,15 @@ const RouteModule = {
 
         this.segmentAnalysis = [];
 
-        for (let i = 0; i < this.segments.length; i++) {
-            const segment = this.segments[i];
+        // Параллельная загрузка данных для всех сегментов
+        const promises = this.segments.map(async (segment, i) => {
             const center = segment.center;
 
             try {
                 const forecast = await WeatherModule.getForecast(center.lat, center.lon, date);
                 const analyzed = WeatherModule.analyzeForecast(forecast);
 
-                this.segmentAnalysis.push({
+                return {
                     segmentIndex: i,
                     coordinates: center,
                     distance: segment.distance,
@@ -284,18 +369,33 @@ const RouteModule = {
                     analyzed: analyzed,
                     riskLevel: analyzed.summary.overallRisk,
                     riskScore: this.calculateSegmentRiskScore(analyzed)
-                });
+                };
             } catch (error) {
                 Utils.error(`Ошибка анализа сегмента ${i}`, error);
-                this.segmentAnalysis.push({
+                return {
                     segmentIndex: i,
                     coordinates: center,
                     error: error.message
-                });
+                };
             }
+        });
 
-            // Небольшая задержка
-            await new Promise(resolve => setTimeout(resolve, 100));
+        // Ждём завершения всех запросов
+        this.segmentAnalysis = await Promise.all(promises);
+
+        // Сохраняем данные анализа для текущего маршрута
+        if (this.currentRoute && this.currentRoute.id) {
+            this.routeAnalysisData[this.currentRoute.id] = {
+                segments: [...this.segments],
+                segmentAnalysis: [...this.segmentAnalysis]
+            };
+            console.log('💾 Данные анализа сохранены для маршрута:', this.currentRoute.id, this.routeAnalysisData[this.currentRoute.id]);
+            console.log('📦 routeAnalysisData:', Object.keys(this.routeAnalysisData));
+
+            // Сохраняем в localStorage
+            this.saveAnalysisData();
+        } else {
+            console.warn('⚠️ currentRoute или currentRoute.id не определён:', this.currentRoute);
         }
 
         Utils.log(`Проанализировано ${this.segmentAnalysis.length} сегментов`);
@@ -342,7 +442,12 @@ const RouteModule = {
      */
     saveRoute(route = this.currentRoute) {
         if (!route) return false;
-        return Storage.saveRoute(route);
+        const result = Storage.saveRoute(route);
+        
+        // Обновление состояния кнопки теперь в desktop.html
+        console.log('✅ Маршрут сохранён:', route.name);
+        
+        return result;
     },
 
     /**
@@ -372,12 +477,76 @@ const RouteModule = {
     },
 
     /**
+     * Получить полный отчёт по всем маршрутам
+     */
+    getFullReport() {
+        const routes = this.getSavedRoutes();
+        const report = [];
+
+        routes.forEach(route => {
+            const analysisData = this.routeAnalysisData[route.id] || null;
+            const pilotData = this.getPilotDataForRoute(route.id);
+
+            report.push({
+                route: route,
+                analysisDate: analysisData?.segmentAnalysis?.[0]?.analyzed?.hourly?.[0]?.time || null,
+                segments: analysisData?.segments || [],
+                segmentAnalysis: analysisData?.segmentAnalysis || [],
+                pilotData: pilotData,
+                meteorology: analysisData?.segmentAnalysis?.[0]?.analyzed || null,
+                flightWindows: analysisData?.segmentAnalysis?.[0]?.analyzed?.summary?.flightWindows || [],
+                recommendations: this.generateRouteRecommendations(analysisData, pilotData)
+            });
+        });
+
+        return report;
+    },
+
+    /**
+     * Получить данные пилота для маршрута
+     */
+    getPilotDataForRoute(routeId) {
+        // Проверяем WizardModule.stepData
+        if (typeof WizardModule !== 'undefined' && WizardModule.stepData) {
+            return WizardModule.stepData.pilotData || null;
+        }
+        return null;
+    },
+
+    /**
+     * Сгенерировать рекомендации для маршрута
+     */
+    generateRouteRecommendations(analysisData, pilotData) {
+        if (!analysisData || !analysisData.segmentAnalysis?.length) {
+            return [];
+        }
+
+        const analyzed = analysisData.segmentAnalysis[0].analyzed;
+        if (typeof WeatherModule !== 'undefined' && WeatherModule.generateRecommendations) {
+            return WeatherModule.generateRecommendations(analyzed, pilotData);
+        }
+
+        return [];
+    },
+
+    /**
+     * Удалить данные анализа для маршрута
+     */
+    deleteRouteAnalysis(routeId) {
+        if (this.routeAnalysisData[routeId]) {
+            delete this.routeAnalysisData[routeId];
+            this.saveAnalysisData();
+            console.log('🗑️ Данные анализа удалены для маршрута:', routeId);
+        }
+    },
+
+    /**
      * Импорт KML
      */
     async importKML(file) {
         try {
             const result = await MapModule.loadKML(file);
-            
+
             if (result.routePoints && result.routePoints.length >= 2) {
                 this.currentRoute = {
                     id: Utils.generateId(),
@@ -390,6 +559,10 @@ const RouteModule = {
                 };
 
                 this.createSegments();
+                
+                // Сохраняем маршрут
+                this.saveRoute(this.currentRoute);
+                
                 return this.currentRoute;
             }
 

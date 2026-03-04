@@ -127,10 +127,10 @@ const Storage = {
                 windAlt: 15,           // м/с
                 visibility: 2,         // км
                 precip: 1.4,           // мм/ч
-                tempMin: -10,          // °C
-                tempMax: 35,           // °C
-                cloudCeiling: 300,     // м
-                humidityIcing: 80      // %
+                tempMin: -40,          // °C
+                tempMax: 40,           // °C
+                cloudCeiling: 250,     // м
+                humidityIcing: 85      // %
             };
         } catch (error) {
             Utils.error('Ошибка получения настроек', error);

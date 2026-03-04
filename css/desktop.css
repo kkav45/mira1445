@@ -68,30 +68,31 @@
 
 .panel-actions {
     display: flex;
-    gap: 10px;
+    align-items: center;
+    gap: 8px;
 }
 
 .panel-btn {
-    width: 40px;
-    height: 40px;
-    background: rgba(0, 0, 0, 0.05);
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     border: none;
-    border-radius: 10px;
-    color: #4a5568;
+    border-radius: 8px;
+    color: white;
     font-size: 16px;
     cursor: pointer;
-    transition: all 0.3s;
+    transition: all 0.2s;
     display: flex;
     align-items: center;
     justify-content: center;
 }
 
-.panel-btn:hover { 
-    background: rgba(0, 0, 0, 0.1);
-    transform: translateY(-1px);
+.panel-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
 }
 
-.panel-btn:active { background: rgba(0, 0, 0, 0.15); }
+.panel-btn:active { transform: scale(0.95); }
 
 .panel-btn.close-btn {
     background: rgba(229, 62, 62, 0.15);
@@ -145,20 +146,6 @@
 .panel-content::-webkit-scrollbar { width: 6px; }
 .panel-content::-webkit-scrollbar-thumb { background: rgba(102, 126, 234, 0.3); border-radius: 3px; }
 .panel-content::-webkit-scrollbar-track { background: rgba(0,0,0,0.03); }
-
-.tab-content {
-    display: none;
-}
-
-.tab-content.active {
-    display: block;
-    animation: fadeIn 0.3s ease;
-}
-
-@keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
-}
 
 /* Поля координат (desktop) */
 .coords-row {
@@ -1001,6 +988,16 @@
 
 /* Стили для печати (desktop) */
 @media print {
+    * {
+        print-color-adjust: exact !important;
+        -webkit-print-color-adjust: exact !important;
+    }
+    
+    body, html {
+        overflow: visible !important;
+        height: auto !important;
+    }
+    
     .geo-btn,
     .panel-btn,
     .tabs,
@@ -1010,22 +1007,38 @@
     }
 
     .side-panel {
-        position: relative;
+        position: static !important;
         width: 100%;
         max-width: none;
         box-shadow: none;
+        overflow: visible !important;
+        height: auto !important;
     }
 
     .panel-content {
-        overflow: visible;
+        overflow: visible !important;
+        position: static !important;
+        height: auto !important;
     }
 
-    .chart-container {
+    .chart-container,
+    .scoring-factor,
+    .scoring-recommendations,
+    .scoring-accordion-content {
         page-break-inside: avoid;
     }
 
     .recommendations-block {
         page-break-inside: avoid;
+    }
+    
+    .scoring-accordion {
+        page-break-inside: auto;
+    }
+    
+    .scoring-accordion-content {
+        display: block !important;
+        height: auto !important;
     }
 }
 

@@ -1,9 +1,14 @@
 /**
- * Вкладка дашборда: МЕТЕОПРОГНОЗ 🌤️
- * Отображение метеоданных, графиков и рекомендаций
+ * Вкладка дашборда: МЕТЕОПРОГНОЗ 🌤️ (ОБНОВЛЁННАЯ v0.6.0 — с поддержкой маршрутов)
+ * Отображение метеоданных, графиков и рекомендаций для каждого маршрута
  */
 
 const DashboardTabsMeteo = {
+    /**
+     * Активный маршрут (для выбора маршрута)
+     */
+    activeRoute: 'all',  // 'all' или ID маршрута
+
     /**
      * Рендер контента вкладки
      */
@@ -45,23 +50,36 @@ const DashboardTabsMeteo = {
     },
 
     /**
-     * Основной контент с данными
+     * Основной контент с данными (ОБНОВЛЁННЫЙ v0.6.0)
      */
     renderContent() {
-        // Получаем данные из RouteModule.segmentAnalysis или WeatherModule
-        const segmentAnalysis = typeof RouteModule !== 'undefined' && RouteModule.segmentAnalysis
-            ? RouteModule.segmentAnalysis
+        // Получаем все маршруты из RouteModule
+        const routes = typeof RouteModule !== 'undefined' && RouteModule.savedRoutes
+            ? RouteModule.savedRoutes
             : [];
+
+        // Получаем данные анализа для активного маршрута
+        let segmentAnalysis = [];
+        let segments = [];
+        
+        if (this.activeRoute !== 'all' && RouteModule.routeAnalysisData?.[this.activeRoute]) {
+            // Используем сохранённые данные для конкретного маршрута
+            const routeData = RouteModule.routeAnalysisData[this.activeRoute];
+            segmentAnalysis = routeData.segmentAnalysis || [];
+            segments = routeData.segments || [];
+        } else {
+            // Используем текущие данные (для последнего проанализированного маршрута)
+            segmentAnalysis = typeof RouteModule !== 'undefined' && RouteModule.segmentAnalysis
+                ? RouteModule.segmentAnalysis
+                : [];
+            segments = typeof RouteModule !== 'undefined' && RouteModule.segments
+                ? RouteModule.segments
+                : [];
+        }
 
         const weatherData = typeof WeatherModule !== 'undefined'
             ? WeatherModule.cachedData || WeatherModule.data
             : {};
-
-        console.log('📊 DashboardTabsMeteo.renderContent()', {
-            segmentAnalysisCount: segmentAnalysis.length,
-            weatherDataKeys: Object.keys(weatherData),
-            firstSegment: segmentAnalysis[0]
-        });
 
         // Используем первый сегмент для общих данных
         const firstSegment = segmentAnalysis.length > 0 ? segmentAnalysis[0] : null;
@@ -79,16 +97,32 @@ const DashboardTabsMeteo = {
             hourly = analyzed.timeseries;
         }
 
-        console.log('📊 hourly data:', {
-            count: hourly.length,
-            firstHour: hourly[0]
-        });
-
         // Получаем рекомендации и окна из summary
         const recommendations = summary.recommendations || analyzed.recommendations || [];
         const flightWindows = summary.flightWindows || analyzed.flightWindows || [];
 
+        // Генерируем вкладки для каждого маршрута
+        const routeTabs = routes.length > 0 ? `
+            <div class="dashboard-subtabs" style="margin: 20px 0; display: flex; gap: 8px; flex-wrap: wrap; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px;">
+                <button class="dashboard-subtab ${this.activeRoute === 'all' ? 'active' : ''}"
+                        onclick="DashboardTabsMeteo.setActiveRoute('all')">
+                    📊 Все маршруты
+                </button>
+                ${routes.map((route) => {
+                    const hasAnalysis = RouteModule.routeAnalysisData?.[route.id] ? '✅' : '⏳';
+                    return `
+                        <button class="dashboard-subtab ${this.activeRoute === route.id ? 'active' : ''}"
+                                onclick="DashboardTabsMeteo.setActiveRoute('${route.id}')">
+                            ${hasAnalysis} ${route.name}
+                        </button>
+                    `;
+                }).join('')}
+            </div>
+        ` : '';
+
         return `
+            ${routeTabs}
+
             <!-- Солнечные условия -->
             ${solar ? this.renderSolarInfo(solar) : ''}
 
@@ -118,6 +152,13 @@ const DashboardTabsMeteo = {
                         Роза ветров
                     </div>
                     <div id="dashboardWindRoseChart" style="height: 300px;"></div>
+                </div>
+                <div class="dashboard-chart-container">
+                    <div class="dashboard-chart-title">
+                        <i class="fas fa-cloud"></i>
+                        Нижняя граница облачности
+                    </div>
+                    <div id="dashboardCloudCeilingChart" style="height: 300px;"></div>
                 </div>
                 <div class="dashboard-chart-container">
                     <div class="dashboard-chart-title">
@@ -160,6 +201,18 @@ const DashboardTabsMeteo = {
     },
 
     /**
+     * Установка активного маршрута
+     */
+    setActiveRoute(routeId) {
+        this.activeRoute = routeId;
+        const container = document.getElementById('dashboardBody');
+        if (container) {
+            container.innerHTML = this.render();
+            this.afterRender();
+        }
+    },
+
+    /**
      * Рендер рекомендаций
      */
     renderRecommendations(recommendations) {
@@ -185,30 +238,27 @@ const DashboardTabsMeteo = {
     },
 
     /**
+     * Иконка для рекомендации
+     */
+    getRecommendationIcon(type) {
+        const icons = {
+            critical: 'fa-exclamation-triangle',
+            warning: 'fa-exclamation-circle',
+            success: 'fa-check-circle',
+            info: 'fa-info-circle'
+        };
+        return icons[type] || icons.info;
+    },
+
+    /**
      * Рендер солнечной информации
      */
     renderSolarInfo(solar) {
         const sunriseTime = solar.sunrise || '—';
         const sunsetTime = solar.sunset || '—';
+        const workStart = solar.workStartTime || '—';
+        const workEnd = solar.workEndTime || '—';
         const dayLength = solar.dayLengthText || '—';
-        
-        // Расчёт рабочего времени (рассвет + 30 мин, закат - 30 мин)
-        let workStart = '—';
-        let workEnd = '—';
-        
-        if (solar.sunrise && solar.sunrise !== '—') {
-            const [hours, minutes] = sunriseTime.split(':').map(Number);
-            const startDate = new Date();
-            startDate.setHours(hours, minutes + 30, 0);
-            workStart = startDate.toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit'});
-        }
-        
-        if (solar.sunset && solar.sunset !== '—') {
-            const [hours, minutes] = sunsetTime.split(':').map(Number);
-            const endDate = new Date();
-            endDate.setHours(hours, minutes - 30, 0);
-            workEnd = endDate.toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit'});
-        }
 
         return `
             <div class="dashboard-card">
@@ -223,38 +273,21 @@ const DashboardTabsMeteo = {
                     </div>
                     <div style="background: linear-gradient(135deg, rgba(56, 161, 105, 0.1) 0%, rgba(56, 161, 105, 0.05) 100%); padding: 15px; border-radius: 10px; text-align: center; border: 1px solid rgba(56, 161, 105, 0.2);">
                         <div style="font-size: 10px; color: #718096; text-transform: uppercase; margin-bottom: 6px;">⏰ Рабочее время</div>
-                        <div style="font-size: 20px; font-weight: 700; color: #2d3748;">${workStart} – ${workEnd}</div>
+                        <div style="font-size: 16px; font-weight: 700; color: #2d3748;">${workStart} – ${workEnd}</div>
+                        <div style="font-size: 10px; color: #718096; margin-top: 4px;">${dayLength}</div>
                     </div>
                     <div style="background: linear-gradient(135deg, rgba(237, 137, 54, 0.1) 0%, rgba(237, 137, 54, 0.05) 100%); padding: 15px; border-radius: 10px; text-align: center; border: 1px solid rgba(237, 137, 54, 0.2);">
                         <div style="font-size: 10px; color: #718096; text-transform: uppercase; margin-bottom: 6px;">🌇 Закат</div>
                         <div style="font-size: 20px; font-weight: 700; color: #2d3748;">${sunsetTime}</div>
                     </div>
                     <div style="background: linear-gradient(135deg, rgba(59, 130, 246, 0.1) 0%, rgba(59, 130, 246, 0.05) 100%); padding: 15px; border-radius: 10px; text-align: center; border: 1px solid rgba(59, 130, 246, 0.2);">
-                        <div style="font-size: 10px; color: #718096; text-transform: uppercase; margin-bottom: 6px;">⏱️ Продолжительность</div>
-                        <div style="font-size: 20px; font-weight: 700; color: #2d3748;">${dayLength}</div>
-                    </div>
-                </div>
-                <div style="margin-top: 12px; padding: 10px; background: rgba(56, 161, 105, 0.05); border-radius: 8px; border: 1px solid rgba(56, 161, 105, 0.2);">
-                    <div style="font-size: 11px; color: #276749; display: flex; align-items: center; gap: 6px;">
-                        <i class="fas fa-info-circle" style="color: #38a169;"></i>
-                        <span>Рабочее время для дневного полёта: <strong>рассвет + 30 мин</strong> до <strong>закат - 30 мин</strong></span>
+                        <div style="font-size: 10px; color: #718096; text-transform: uppercase; margin-bottom: 6px;">☀️ УФ-индекс</div>
+                        <div style="font-size: 20px; font-weight: 700; color: #2d3748;">${solar.uvIndex || '—'}</div>
+                        <div style="font-size: 10px; color: #718096; margin-top: 4px;">${solar.uvRisk === 'low' ? 'Низкий' : solar.uvRisk === 'medium' ? 'Средний' : 'Высокий'}</div>
                     </div>
                 </div>
             </div>
         `;
-    },
-
-    /**
-     * Иконка для рекомендации
-     */
-    getRecommendationIcon(type) {
-        const icons = {
-            critical: 'fa-exclamation-triangle',
-            warning: 'fa-exclamation-circle',
-            success: 'fa-check-circle',
-            info: 'fa-info-circle'
-        };
-        return icons[type] || icons.info;
     },
 
     /**
@@ -273,12 +306,10 @@ const DashboardTabsMeteo = {
         return windows.map(w => {
             const riskClass = w.risk === 'low' ? 'allowed' : w.risk === 'medium' ? 'allowed' : 'forbidden';
             const riskLabel = w.risk === 'low' ? '🟢 Низкий' : w.risk === 'medium' ? '🟡 Средний' : '🔴 Высокий';
-            const daylightIcon = w.isDaylight ? '🌅' : '🌙';
-            const daylightText = w.isDaylight ? '(Дневное)' : '';
 
             return `
                 <div class="dashboard-flight-window ${riskClass}">
-                    <div class="dashboard-flight-window-time">${daylightIcon} ${w.start || '--:--'}–${w.end || '--:--'} ${daylightText}</div>
+                    <div class="dashboard-flight-window-time">${w.start || '--:--'}–${w.end || '--:--'}</div>
                     <div class="dashboard-flight-window-duration">${w.duration || 0} ч</div>
                     <div class="dashboard-flight-window-metrics">
                         <div class="dashboard-flight-window-metric">
@@ -307,7 +338,7 @@ const DashboardTabsMeteo = {
             return '<p style="color: #718096;">Нет данных</p>';
         }
 
-        const rows = hourly.slice(0, 12).map(h => {
+        const rows = hourly.slice(0, 24).map(h => {
             const riskClass = h.risk === 'low' ? 'low' : h.risk === 'medium' ? 'medium' : 'high';
             const riskLabel = h.risk === 'low' ? '🟢 Низкий' : h.risk === 'medium' ? '🟡 Средний' : '🔴 Высокий';
             const temp = h.temp2m || h.temp || 0;
@@ -315,7 +346,7 @@ const DashboardTabsMeteo = {
             const windDir = h.windDir || h.wind_direction_10m || 0;
             const precip = h.precip || h.precipitation || 0;
             const humidity = h.humidity || h.relative_humidity_2m || 0;
-            const pressure = h.pressure || 0;  // мм рт. ст.
+            const pressure = h.pressure || 0;
 
             return `
                 <tr>
@@ -356,7 +387,6 @@ const DashboardTabsMeteo = {
      * Построение графиков после рендера
      */
     afterRender() {
-        // Получаем данные из RouteModule.segmentAnalysis
         const segmentAnalysis = typeof RouteModule !== 'undefined' && RouteModule.segmentAnalysis
             ? RouteModule.segmentAnalysis
             : [];
@@ -365,23 +395,14 @@ const DashboardTabsMeteo = {
             ? WeatherModule.cachedData || WeatherModule.data
             : {};
 
-        // Используем первый сегмент
         const firstSegment = segmentAnalysis.length > 0 ? segmentAnalysis[0] : null;
         const analyzed = firstSegment?.analyzed || weatherData;
-
-        console.log('📈 afterRender():', {
-            firstSegment: firstSegment,
-            analyzed: analyzed,
-            hasHourly: !!analyzed?.hourly,
-            hasTimeseries: !!analyzed?.timeseries
-        });
 
         if (!analyzed) {
             console.warn('⚠️ No analyzed data found');
             return;
         }
 
-        // Даём DOM время на рендер
         setTimeout(() => {
             this.initCharts(analyzed);
         }, 100);
@@ -396,30 +417,13 @@ const DashboardTabsMeteo = {
             return;
         }
 
-        // Получаем почасовые данные
         const hourly = this.extractHourlyData(data);
         const times = hourly.map(h => h.time);
 
-        console.log('📉 initCharts():', {
-            hourlyCount: hourly.length,
-            timesCount: times.length,
-            firstHour: hourly[0],
-            hasTime: !!hourly[0]?.time,
-            hasTemp: !!hourly[0]?.temp,
-            hasWind: !!hourly[0]?.wind,
-            hasWindDir: !!hourly[0]?.windDir
-        });
-
-        // Временной ряд
         this.initTimeSeriesChart(times, hourly);
-
-        // Роза ветров
         this.initWindRoseChart(hourly);
-
-        // Вертикальный профиль ветра
+        this.initCloudCeilingChart(hourly);
         this.initWindProfileChart(data);
-
-        // Турбулентность
         this.initTurbulenceChart(times, hourly);
     },
 
@@ -427,11 +431,9 @@ const DashboardTabsMeteo = {
      * Извлечение почасовых данных
      */
     extractHourlyData(data) {
-        // Пытаемся получить данные из разных источников
         if (data.hourly && Array.isArray(data.hourly)) return data.hourly;
         if (data.analyzed && data.analyzed.hourly) return data.analyzed.hourly;
 
-        // Если есть raw данные Open-Meteo
         if (data.timeseries && Array.isArray(data.timeseries)) {
             return data.timeseries.map((t, i) => ({
                 time: t.time ? t.time.split('T')[1] : `${i}:00`,
@@ -490,7 +492,6 @@ const DashboardTabsMeteo = {
      * Роза ветров
      */
     initWindRoseChart(hourly) {
-        // Группировка по направлениям
         const directions = { 'С': 0, 'СВ': 0, 'В': 0, 'ЮВ': 0, 'Ю': 0, 'ЮЗ': 0, 'З': 0, 'СЗ': 0 };
         const counts = { 'С': 0, 'СВ': 0, 'В': 0, 'ЮВ': 0, 'Ю': 0, 'ЮЗ': 0, 'З': 0, 'СЗ': 0 };
 
@@ -536,6 +537,98 @@ const DashboardTabsMeteo = {
     },
 
     /**
+     * Нижняя граница облачности (горизонтальный график - постоянная высота)
+     */
+    initCloudCeilingChart(hourly) {
+        const times = hourly.map((h, i) => {
+            const time = h.time || `${i}:00`;
+            return time.length > 5 ? time.substring(0, 5) : time;
+        });
+
+        // Расчёт единой нижней границы облачности для всего периода
+        let cloudCeiling = null;
+        for (const h of hourly) {
+            // Правильные названия полей из weather.js
+            const totalCloud = h.cloudCover || h.cloud_cover || 0;
+            const lowCloud = h.cloudCoverLow || h.cloud_cover_low || 0;
+            
+            if (lowCloud > 50) {
+                cloudCeiling = 400; // Низкие облака
+                break;
+            }
+            if (totalCloud > 50) {
+                cloudCeiling = 1500; // Средняя облачность
+                break;
+            }
+        }
+
+        // Если облачности нет или нет данных
+        if (cloudCeiling === null) {
+            cloudCeiling = 3500; // Ясно
+        }
+
+        console.log('☁️ Нижняя граница облачности:', cloudCeiling, 'м');
+
+        // Горизонтальная линия
+        const trace = {
+            x: times,
+            y: times.map(() => cloudCeiling),
+            type: 'scatter',
+            mode: 'lines',
+            line: {
+                color: cloudCeiling < 500 ? '#ef4444' : (cloudCeiling < 1000 ? '#f59e0b' : '#38a169'),
+                width: 4
+            },
+            name: 'Нижняя граница: ' + cloudCeiling + ' м',
+            hovertemplate: '%{x}<br>Высота: ' + cloudCeiling + ' м<extra></extra>'
+        };
+
+        // Красная линия минимума 250м
+        const minCeilingLine = {
+            x: times,
+            y: times.map(() => 250),
+            mode: 'lines',
+            line: { color: '#ef4444', width: 2, dash: 'dot' },
+            name: 'Мин. 250 м',
+            hoverinfo: 'none'
+        };
+
+        // Оранжевая линия 500м
+        const cautionCeilingLine = {
+            x: times,
+            y: times.map(() => 500),
+            mode: 'lines',
+            line: { color: '#f59e0b', width: 2, dash: 'dot' },
+            name: 'Ожидание 500 м',
+            hoverinfo: 'none'
+        };
+
+        const layout = {
+            margin: { t: 10, b: 50, l: 60, r: 20 },
+            height: 280,
+            xaxis: {
+                title: 'Время',
+                tickangle: -45,
+                tickfont: { size: 10 }
+            },
+            yaxis: {
+                title: 'Высота, м',
+                range: [0, 3500]
+            },
+            showlegend: true,
+            legend: {
+                orientation: 'h',
+                y: 1.15,
+                font: { size: 10 }
+            },
+            plot_bgcolor: 'rgba(0,0,0,0.02)',
+            paper_bgcolor: 'rgba(0,0,0,0)'
+        };
+
+        Plotly.newPlot('dashboardCloudCeilingChart', [trace, minCeilingLine, cautionCeilingLine], layout, { responsive: true, displayModeBar: false });
+    },
+
+    /**
      * Вертикальный профиль ветра
      */
     initWindProfileChart(data) {
@@ -545,10 +638,9 @@ const DashboardTabsMeteo = {
             return (data.analyzed && data.analyzed[key]) || (data.current && data.current[key]) || 0;
         });
 
-        // Если нет данных, используем заглушку
         if (windSpeeds.every(w => w === 0)) {
             for (let i = 0; i < heights.length; i++) {
-                windSpeeds[i] = 5 + i * 2; // Примерные данные
+                windSpeeds[i] = 5 + i * 2;
             }
         }
 
@@ -574,7 +666,6 @@ const DashboardTabsMeteo = {
      * Турбулентность
      */
     initTurbulenceChart(times, hourly) {
-        // Генерируем индекс турбулентности на основе ветра
         const turbulence = hourly.map(h => {
             const wind = h.wind10m || h.wind || 0;
             return Math.min(100, wind * 10);

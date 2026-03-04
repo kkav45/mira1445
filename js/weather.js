@@ -210,9 +210,20 @@ const WeatherModule = {
         const month = new Date(daily.time[index]).getMonth() + 1;
         const uvIndex = month >= 5 && month <= 8 ? (month === 6 || month === 7 ? 6 : 5) : month >= 3 && month <= 10 ? 3 : 1;
 
+        // Рабочее время: рассвет +30 мин, закат -30 мин
+        let workStart = null, workEnd = null;
+        if (sunrise && sunset) {
+            const sunriseDate = new Date(sunrise);
+            const sunsetDate = new Date(sunset);
+            workStart = new Date(sunriseDate.getTime() + 30 * 60 * 1000); // +30 минут
+            workEnd = new Date(sunsetDate.getTime() - 30 * 60 * 1000); // -30 минут
+        }
+
         return {
             sunrise: sunrise ? new Date(sunrise).toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit'}) : '—',
             sunset: sunset ? new Date(sunset).toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit'}) : '—',
+            workStartTime: workStart ? workStart.toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit'}) : '—',
+            workEndTime: workEnd ? workEnd.toLocaleTimeString('ru-RU', {hour: '2-digit', minute: '2-digit'}) : '—',
             dayLength: dayLength,
             dayLengthText: `${Math.floor(dayLength / 60)}ч ${dayLength % 60}мин`,
             uvIndex: uvIndex,
@@ -276,11 +287,20 @@ const WeatherModule = {
 
         const params = this.getForecastParams();
 
-        // Если указана дата, используем start_date и end_date вместо forecast_days
+        // Если указана дата, используем её
         if (date) {
-            params.start_date = date;
-            params.end_date = date;
+            // Форматируем дату в YYYY-MM-DD
+            const dateObj = new Date(date);
+            const year = dateObj.getFullYear();
+            const month = String(dateObj.getMonth() + 1).padStart(2, '0');
+            const day = String(dateObj.getDate()).padStart(2, '0');
+            const dateStr = `${year}-${month}-${day}`;
+            
+            params.start_date = dateStr;
+            params.end_date = dateStr;
             delete params.forecast_days;
+            
+            Utils.log(`📅 Запрос метео на дату: ${dateStr}`);
         }
 
         const url = `${this.API_BASE}/forecast?latitude=${lat}&longitude=${lon}&${this.buildQueryString(params)}`;
@@ -409,21 +429,25 @@ const WeatherModule = {
         const analyzed = [];
 
         for (let i = 0; i < hourly.time.length; i++) {
+            const rawVis = hourly.visibility?.[i];
+            const convertedVis = Math.round((rawVis || 10000) / 1000 * 10) / 10;
+            
             const hour = {
                 time: hourly.time[i],
                 temp2m: Math.round((hourly.temperature_2m?.[i] || 0) * 10) / 10,    // °C (1 знак)
                 humidity: Math.round((hourly.relative_humidity_2m?.[i] || 0) * 10) / 10, // % (1 знак)
                 dewPoint: Math.round((hourly.dew_point_2m?.[i] || 0) * 10) / 10,   // °C (1 знак)
-                wind10m: Math.round((hourly.wind_speed_10m?.[i] || 0) * 10) / 10,  // м/с (1 знак)
+                wind10m: Math.round(((hourly.wind_speed_10m?.[i] || 0) / 3.6) * 10) / 10,  // м/с (1 знак) из км/ч
                 windDir: Math.round(hourly.wind_direction_10m?.[i] || 0),          // ° (целое)
-                windGust: Math.round((hourly.wind_gusts_10m?.[i] || 0) * 10) / 10, // м/с (1 знак)
+                windGust: Math.round(((hourly.wind_gusts_10m?.[i] || 0) / 3.6) * 10) / 10, // м/с (1 знак) из км/ч
                 precip: Math.round((hourly.precipitation?.[i] || 0) * 10) / 10,    // мм (1 знак)
                 rain: Math.round((hourly.rain?.[i] || 0) * 10) / 10,               // мм (1 знак)
                 snow: Math.round((hourly.snowfall?.[i] || 0) * 10) / 10,           // мм (1 знак)
                 cloudCover: Math.round(hourly.cloud_cover?.[i] || 0),              // % (целое)
                 cloudCoverLow: Math.round(hourly.cloud_cover_low?.[i] || 0),       // % (целое)
+                cloudCeiling: this.calculateCloudCeiling(hourly.cloud_cover_low?.[i] || 0, hourly.cloud_cover?.[i] || 0), // м
                 pressure: this.hPaToMmHg(hourly.pressure_msl?.[i] || 0),           // мм рт. ст. (целое)
-                visibility: Math.round((hourly.visibility?.[i] || 10000) / 1000 * 10) / 10, // км (1 знак)
+                visibility: convertedVis, // км (1 знак)
                 weatherCode: hourly.weather_code?.[i] || 0
             };
 
@@ -464,82 +488,153 @@ const WeatherModule = {
     },
 
     /**
-     * Расчёт общего риска
+     * Расчёт общего риска (УНИФИЦИРОВАНО с scoring.js)
+     * Использует те же формулы что и ScoringModule.calculateIntegralScore
      */
     calculateRiskScore(hour, thresholds) {
-        let score = 0;
-
-        // Ветер
-        if (hour.wind10m > thresholds.windGround) score += 2;
-        else if (hour.wind10m > thresholds.windGround * 0.8) score += 1;
-
-        // Видимость
-        if (hour.visibility < thresholds.visibility) score += 2;
-        else if (hour.visibility < thresholds.visibility * 1.5) score += 1;
+        // Расчёт по факторам (как в scoring.js)
+        const windRatio = hour.wind10m / (thresholds.windGround || 10);
+        let windScore = 0;
+        if (windRatio > 1.2) windScore = 3;
+        else if (windRatio > 1.0) windScore = 2.5;
+        else if (windRatio > 0.8) windScore = 1.5;
+        else if (windRatio > 0.6) windScore = 0.5;
 
         // Осадки
-        if (hour.precip > thresholds.precip) score += 2;
-        else if (hour.precip > 0.5) score += 1;
+        let effectivePrecip = hour.precip;
+        if (hour.snow > 0) effectivePrecip = hour.precip * 1.3;
+        let precipScore = 0;
+        if (thresholds.precip === 0 && hour.precip > 0) precipScore = 3;
+        else if (effectivePrecip > 2) precipScore = 3;
+        else if (effectivePrecip > 0.5) precipScore = 2;
+        else if (effectivePrecip > 0.1) precipScore = 1;
+
+        // Видимость
+        const visRatio = hour.visibility / (thresholds.visibility || 2);
+        let cloudPenalty = 0;
+        if (hour.cloudCoverLow > 80) cloudPenalty = 0.5;
+        else if (hour.cloudCover > 90) cloudPenalty = 0.3;
+        let visibilityScore = 0;
+        if (visRatio < 0.5) visibilityScore = Math.min(3, 3 + cloudPenalty);
+        else if (visRatio < 1.0) visibilityScore = Math.min(3, 2 + cloudPenalty);
+        else if (visRatio < 1.5) visibilityScore = Math.min(3, 1 + cloudPenalty);
+        else visibilityScore = cloudPenalty;
+
+        // Температура
+        let tempScore = 0;
+        if (hour.temp2m < thresholds.tempMin || hour.temp2m > thresholds.tempMax) tempScore = 3;
+        else if (hour.temp2m < thresholds.tempMin + 5 || hour.temp2m > thresholds.tempMax - 5) tempScore = 1.5;
 
         // Обледенение
-        if (hour.icingRisk === 'high') score += 2;
-        else if (hour.icingRisk === 'medium') score += 1;
+        let icingScore = 0;
+        if (hour.icingRisk === 'high') icingScore = 3;
+        else if (hour.icingRisk === 'medium') icingScore = 1.5;
 
-        return score;
+        // Турбулентность
+        let turbulenceScore = 0;
+        if (hour.turbulenceRisk === 'high') turbulenceScore = 2.5;
+        else if (hour.turbulenceRisk === 'medium') turbulenceScore = 1;
+
+        // Взвешенная сумма (как в scoring.js)
+        const baseScore = (
+            windScore * 0.25 +
+            precipScore * 0.20 +
+            visibilityScore * 0.15 +
+            tempScore * 0.15 +
+            icingScore * 0.15 +
+            turbulenceScore * 0.10
+        );
+
+        return baseScore;  // 0-3 балла (средневзвешенное)
     },
 
     /**
-     * Детализация рисков по категориям (НОВОЕ)
+     * Детализация рисков по категориям (НОВОЕ + унификация)
      */
     calculateRiskBreakdown(hour, thresholds) {
         const breakdown = {
             wind: { score: 0, maxScore: 3, value: hour.wind10m, unit: 'м/с', trend: 'stable' },
             precip: { score: 0, maxScore: 3, value: hour.precip, unit: 'мм/ч', trend: 'stable' },
             visibility: { score: 0, maxScore: 3, value: hour.visibility, unit: 'км', trend: 'stable' },
+            temp: { score: 0, maxScore: 3, value: hour.temp2m, unit: '°C', trend: 'stable' },
             icing: { score: 0, maxScore: 3, value: hour.icingRisk, unit: '', trend: 'stable' },
-            turbulence: { score: 0, maxScore: 3, value: hour.turbulenceRisk, unit: '', trend: 'stable' }
+            turbulence: { score: 0, maxScore: 2.5, value: hour.turbulenceRisk, unit: '', trend: 'stable' },
+            cloud: { score: 0, maxScore: 2, value: hour.cloudCover, unit: '%', trend: 'stable' },
+            pressure: { score: 0, maxScore: 1.5, value: hour.pressure, unit: 'мм рт.ст.', trend: 'stable' }
         };
 
-        // Ветер (0-3 балла)
-        if (hour.wind10m > thresholds.windGround) {
+        // Ветер (0-3 балла) — унифицировано с scoring.js
+        const windRatio = hour.wind10m / (thresholds.windGround || 10);
+        if (windRatio > 1.2) {
             breakdown.wind.score = 3;
             breakdown.wind.status = 'critical';
-        } else if (hour.wind10m > thresholds.windGround * 0.8) {
-            breakdown.wind.score = 2;
+        } else if (windRatio > 1.0) {
+            breakdown.wind.score = 2.5;
+            breakdown.wind.status = 'critical';
+        } else if (windRatio > 0.8) {
+            breakdown.wind.score = 1.5;
             breakdown.wind.status = 'warning';
-        } else if (hour.wind10m > thresholds.windGround * 0.6) {
-            breakdown.wind.score = 1;
+        } else if (windRatio > 0.6) {
+            breakdown.wind.score = 0.5;
             breakdown.wind.status = 'caution';
         } else {
             breakdown.wind.status = 'good';
         }
 
-        // Осадки (0-3 балла)
-        if (hour.precip > thresholds.precip * 2) {
+        // Осадки (0-3 балла) — унифицировано с scoring.js + снег
+        let effectivePrecip = hour.precip;
+        if (hour.snow > 0) effectivePrecip = hour.precip * 1.3;
+        
+        const extremeCodes = [95, 96, 97];
+        if (extremeCodes.includes(hour.weatherCode)) {
             breakdown.precip.score = 3;
             breakdown.precip.status = 'critical';
-        } else if (hour.precip > thresholds.precip) {
+        } else if (thresholds.precip === 0 && hour.precip > 0) {
+            breakdown.precip.score = 3;
+            breakdown.precip.status = 'critical';
+        } else if (effectivePrecip > 2) {
+            breakdown.precip.score = 3;
+            breakdown.precip.status = 'critical';
+        } else if (effectivePrecip > 0.5) {
             breakdown.precip.score = 2;
             breakdown.precip.status = 'warning';
-        } else if (hour.precip > 0.5) {
+        } else if (effectivePrecip > 0.1) {
             breakdown.precip.score = 1;
             breakdown.precip.status = 'caution';
         } else {
             breakdown.precip.status = 'good';
         }
 
-        // Видимость (0-3 балла)
-        if (hour.visibility < thresholds.visibility * 0.5) {
-            breakdown.visibility.score = 3;
+        // Видимость (0-3 балла) — унифицировано с scoring.js + облачность
+        const minVis = thresholds.visibility || 2;
+        const visRatio = hour.visibility / minVis;
+        let cloudPenalty = 0;
+        if (hour.cloudCoverLow > 80) cloudPenalty = 0.5;
+        else if (hour.cloudCover > 90) cloudPenalty = 0.3;
+        
+        if (visRatio < 0.5) {
+            breakdown.visibility.score = Math.min(3, 3 + cloudPenalty);
             breakdown.visibility.status = 'critical';
-        } else if (hour.visibility < thresholds.visibility) {
-            breakdown.visibility.score = 2;
+        } else if (visRatio < 1.0) {
+            breakdown.visibility.score = Math.min(3, 2 + cloudPenalty);
             breakdown.visibility.status = 'warning';
-        } else if (hour.visibility < thresholds.visibility * 1.5) {
-            breakdown.visibility.score = 1;
+        } else if (visRatio < 1.5) {
+            breakdown.visibility.score = Math.min(3, 1 + cloudPenalty);
             breakdown.visibility.status = 'caution';
         } else {
-            breakdown.visibility.status = 'good';
+            breakdown.visibility.score = cloudPenalty > 0 ? cloudPenalty : 0;
+            breakdown.visibility.status = cloudPenalty > 0 ? 'caution' : 'good';
+        }
+
+        // Температура (0-3 балла) — унифицировано с scoring.js
+        if (hour.temp2m < thresholds.tempMin || hour.temp2m > thresholds.tempMax) {
+            breakdown.temp.score = 3;
+            breakdown.temp.status = 'critical';
+        } else if (hour.temp2m < thresholds.tempMin + 5 || hour.temp2m > thresholds.tempMax - 5) {
+            breakdown.temp.score = 1.5;
+            breakdown.temp.status = 'warning';
+        } else {
+            breakdown.temp.status = 'good';
         }
 
         // Обледенение (0-3 балла)
@@ -547,23 +642,46 @@ const WeatherModule = {
             breakdown.icing.score = 3;
             breakdown.icing.status = 'critical';
         } else if (hour.icingRisk === 'medium') {
-            breakdown.icing.score = 2;
+            breakdown.icing.score = 1.5;
             breakdown.icing.status = 'warning';
-        } else if (hour.icingRisk === 'low') {
+        } else {
             breakdown.icing.score = 0;
             breakdown.icing.status = 'good';
         }
 
-        // Турбулентность (0-3 балла)
+        // Турбулентность (0-2.5 балла)
         if (hour.turbulenceRisk === 'high') {
-            breakdown.turbulence.score = 3;
+            breakdown.turbulence.score = 2.5;
             breakdown.turbulence.status = 'critical';
         } else if (hour.turbulenceRisk === 'medium') {
-            breakdown.turbulence.score = 2;
+            breakdown.turbulence.score = 1;
             breakdown.turbulence.status = 'warning';
         } else {
             breakdown.turbulence.score = 0;
             breakdown.turbulence.status = 'good';
+        }
+
+        // 🆕 Облачность (0-2 балла)
+        let cloudScore = 0;
+        if (hour.cloudCoverLow > 90) cloudScore += 1.5;
+        else if (hour.cloudCoverLow > 70) cloudScore += 1.0;
+        else if (hour.cloudCoverLow > 50) cloudScore += 0.5;
+        if (hour.cloudCover > 95) cloudScore += 0.5;
+        else if (hour.cloudCover > 80) cloudScore += 0.3;
+        breakdown.cloud.score = Math.min(2, cloudScore);
+        breakdown.cloud.status = cloudScore > 1.5 ? 'critical' : cloudScore > 0.5 ? 'warning' : cloudScore > 0 ? 'caution' : 'good';
+
+        // 🆕 Давление (0-1.5 балла)
+        const normalMin = 750, normalMax = 770;
+        const criticalMin = 730, criticalMax = 790;
+        if (hour.pressure < criticalMin || hour.pressure > criticalMax) {
+            breakdown.pressure.score = 1.5;
+            breakdown.pressure.status = 'critical';
+        } else if (hour.pressure < normalMin || hour.pressure > normalMax) {
+            breakdown.pressure.score = 0.8;
+            breakdown.pressure.status = 'warning';
+        } else {
+            breakdown.pressure.status = 'good';
         }
 
         return breakdown;
@@ -686,12 +804,50 @@ const WeatherModule = {
     },
 
     /**
-     * Уровень риска
+     * Уровень риска (УНИФИЦИРОВАНО с scoring.js)
+     * Конвертация средневзвешенного score (0-3) в уровень риска
+     * Для корреляции с integral score (0-10): score * 3.33 ≈ integral
      */
     getRiskLevel(score) {
-        if (score >= 5) return 'high';
-        if (score >= 2) return 'medium';
+        // Конвертируем средневзвешенный score (0-3) в уровень как integral score (0-10)
+        // integralScore ≈ baseScore * 3.33 (с учётом коэффициентов)
+        // low: 0-2.5 → baseScore 0-0.75
+        // medium: 2.5-5.5 → baseScore 0.75-1.65
+        // high: 5.5-10 → baseScore > 1.65
+        if (score >= 1.65) return 'high';
+        if (score >= 0.75) return 'medium';
         return 'low';
+    },
+
+    /**
+     * 🆕 Расчёт нижней границы облаков (НГО) в метрах
+     * @param {number} cloudCoverLow - Нижняя облачность (%)
+     * @param {number} cloudCover - Общая облачность (%)
+     * @returns {number|null} Высота в метрах или null (если ясно)
+     */
+    calculateCloudCeiling(cloudCoverLow, cloudCover) {
+        // Если облачности нет — НГО не определена
+        if (cloudCover < 30 && cloudCoverLow < 30) {
+            return 3500; // Ясно, условно высокая граница
+        }
+        
+        // Расчёт на основе нижней облачности
+        if (cloudCoverLow > 80) {
+            return 400; // Низкие облака
+        } else if (cloudCoverLow > 50) {
+            return 1500; // Средняя облачность
+        } else if (cloudCoverLow > 30) {
+            return 3000; // Высокая облачность
+        }
+        
+        // Если нижняя облачность небольшая, смотрим на общую
+        if (cloudCover > 90) {
+            return 800;
+        } else if (cloudCover > 70) {
+            return 2000;
+        }
+        
+        return 3500; // Преимущественно ясно
     },
 
     /**
@@ -772,7 +928,7 @@ const WeatherModule = {
                 recommendations.push({
                     type: 'info',
                     icon: 'fa-sun',
-                    text: `Дневной полёт: ${solar.sunrise} – ${solar.sunset} (продолжительность ${solar.dayLengthText})`
+                    text: `Рабочее время (рассвет+30 до закат-30): ${solar.workStartTime} – ${solar.workEndTime} (продолжительность ${solar.dayLengthText})`
                 });
             }
         } else {
@@ -1120,34 +1276,47 @@ const WeatherModule = {
         const summary = analyzedData.summary;
         const thresholds = Storage.getThresholds();
 
+        // === ПРОВЕРКА: ВНЁС ЛИ ПИЛОТ ДАННЫЕ? ===
+        // pilotData может быть в двух форматах:
+        // 1. { ground: [...], flight: [...] } - из отчёта
+        // 2. { windSpeed, temp, ... } - из wizard
+        const hasPilotData = pilotData && (
+            (pilotData.ground && pilotData.ground.length > 0) ||
+            (pilotData.flight && pilotData.flight.length > 0) ||
+            (pilotData.windSpeed || pilotData.temp || pilotData.visibility)
+        );
+
         // === КРИТИЧЕСКИЕ ФЛАГИ ОТ ПИЛОТА ===
-        const hasCriticalFlags = analyzedData.corrections?.criticalFlags;
-        
-        if (hasCriticalFlags?.fog) {
-            recommendations.push({
-                type: 'critical',
-                icon: 'fa-smog',
-                text: `<strong>Туман по данным пилота!</strong> Видимость ограничена. Полёт не рекомендуется.`
-            });
+        // Показываем ТОЛЬКО если пилот вносил данные
+        if (hasPilotData) {
+            const hasCriticalFlags = analyzedData.corrections?.criticalFlags;
+
+            if (hasCriticalFlags?.fog) {
+                recommendations.push({
+                    type: 'critical',
+                    icon: 'fa-smog',
+                    text: `<strong>Туман по данным пилота!</strong> Видимость ограничена. Полёт не рекомендуется.`
+                });
+            }
+
+            if (hasCriticalFlags?.precip) {
+                recommendations.push({
+                    type: 'warning',
+                    icon: 'fa-cloud-rain',
+                    text: `<strong>Осадки по данным пилота!</strong> Проверьте интенсивность перед вылетом.`
+                });
+            }
+
+            if (hasCriticalFlags?.snow) {
+                recommendations.push({
+                    type: 'critical',
+                    icon: 'fa-snowflake',
+                    text: `<strong>Снег по данным пилота!</strong> Риск обледенения повышен.`
+                });
+            }
         }
 
-        if (hasCriticalFlags?.precip) {
-            recommendations.push({
-                type: 'warning',
-                icon: 'fa-cloud-rain',
-                text: `<strong>Осадки по данным пилота!</strong> Проверьте интенсивность перед вылетом.`
-            });
-        }
-
-        if (hasCriticalFlags?.snow) {
-            recommendations.push({
-                type: 'critical',
-                icon: 'fa-snowflake',
-                text: `<strong>Снег по данным пилота!</strong> Риск обледенения повышен.`
-            });
-        }
-
-        // === ПРОВЕРКА ПО СКОРРЕКТИРОВАННЫМ ДАННЫМ ===
+        // === ПРОВЕРКА ПО ДАННЫМ АНАЛИЗА (ОТКРЫТЫЕ ДАННЫЕ) ===
 
         // Ветер
         if (parseFloat(summary.avgWind) > thresholds.windGround) {
@@ -1164,8 +1333,8 @@ const WeatherModule = {
             });
         }
 
-        // Осадки (из данных)
-        if (!hasCriticalFlags?.precip && parseFloat(summary.totalPrecip) > 0) {
+        // Осадки
+        if (parseFloat(summary.totalPrecip) > 0) {
             recommendations.push({
                 type: 'warning',
                 icon: 'fa-cloud-rain',
@@ -1185,7 +1354,7 @@ const WeatherModule = {
 
         // Видимость
         const lowVisibilityHours = analyzedData.hourly.filter(h => h.visibility < thresholds.visibility);
-        if (lowVisibilityHours.length > 0 && !hasCriticalFlags?.fog) {
+        if (lowVisibilityHours.length > 0) {
             recommendations.push({
                 type: 'warning',
                 icon: 'fa-eye',
@@ -1194,17 +1363,32 @@ const WeatherModule = {
         }
 
         // === ОБЩИЙ РИСК ===
+        // Текст НЕ упоминает коррекцию, если пилот не вносил данные
         if (summary.overallRisk === 'high') {
             recommendations.unshift({
                 type: 'critical',
                 icon: 'fa-ban',
-                text: `<strong>ВЫСОКИЙ РИСК</strong> по скорректированным данным. Полёт не рекомендуется.`
+                text: hasPilotData
+                    ? `<strong>ВЫСОКИЙ РИСК</strong> по скорректированным данным. Полёт не рекомендуется.`
+                    : `<strong>ВЫСОКИЙ РИСК</strong> по данным анализа. Полёт не рекомендуется.`
             });
         } else if (summary.overallRisk === 'medium') {
             recommendations.unshift({
                 type: 'warning',
                 icon: 'fa-exclamation-triangle',
-                text: `<strong>СРЕДНИЙ РИСК</strong> по скорректированным данным. Будьте осторожны.`
+                text: hasPilotData
+                    ? `<strong>СРЕДНИЙ РИСК</strong> по скорректированным данным. Будьте осторожны.`
+                    : `<strong>СРЕДНИЙ РИСК</strong> по данным анализа. Будьте осторожны.`
+            });
+        }
+
+        // === ИНФОРМАЦИЯ О КОРРЕКЦИИ ===
+        // Показываем ТОЛЬКО если пилот вносил данные
+        if (hasPilotData) {
+            recommendations.push({
+                type: 'info',
+                icon: 'fa-user-check',
+                text: `<strong>Данные скорректированы</strong> по фактическим наблюдениям пилота.`
             });
         }
 
@@ -1213,18 +1397,17 @@ const WeatherModule = {
             const bestWindow = summary.flightWindows.reduce((best, current) =>
                 current.hours.length > best.hours.length ? current : best
             );
-            const startTime = new Date(bestWindow.start).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-            const endTime = new Date(bestWindow.end).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
 
             recommendations.push({
                 type: 'success',
                 icon: 'fa-check-circle',
-                text: `<strong>Благоприятное окно: ${startTime}–${endTime}</strong>. Лучшее время для полёта.`
+                text: `<strong>Благоприятное окно: ${bestWindow.start}–${bestWindow.end}</strong>. Лучшее время для полёта.`
             });
         }
 
         // Если есть коррекция от пилота
-        if (pilotData || analyzedData.corrected) {
+        // Используем ту же проверку hasPilotData, что и выше
+        if (hasPilotData) {
             recommendations.push({
                 type: 'info',
                 icon: 'fa-flag',

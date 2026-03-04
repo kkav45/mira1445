@@ -1,14 +1,13 @@
 ﻿/**
  * MIRA - Пошаговый мастер (wizard.js)
- * 3 шага:
+ * 1 шаг:
  *   1. Дата + Время + Маршрут + Метеоданные
- *   2. Пилот (Сидя на земле)
- *   3. Отчёт PDF
+ *   После анализа → сразу открывается дашборд
  */
 
 const WizardModule = {
     currentStep: 1,
-    totalSteps: 3,
+    totalSteps: 1,
     stepData: {},
     currentTab: 'recommendations',
     currentVizTab: 'table',
@@ -21,7 +20,6 @@ const WizardModule = {
         this.currentStep = 1;
         this.currentTab = 'recommendations';
         this.currentVizTab = 'table';
-        this.step3TabsInitialized = false; // Флаг инициализации вкладок шага 3
         this.stepData = {
             date: Utils.formatDateTimeLocal(Utils.getTomorrowDate()).split('T')[0],
             time: '00:00',
@@ -58,23 +56,25 @@ const WizardModule = {
 
         let html = '';
 
+        // Рендеринг в зависимости от текущего шага
         switch (this.currentStep) {
             case 1:
                 html += this.renderStep1Html();
-                html += this.renderNavigation();
                 break;
             case 2:
-                // Step 2: Pilot (was step 3)
-                this.step3TabsInitialized = false;
-                html += this.renderStep3Html();
-                html += this.renderNavigation();
+                html += this.renderStep2Html();
                 break;
             case 3:
-                // Step 3: Report (was step 4)
-                html += this.renderStep4Html();
-                html += this.renderNavigation();
+                html += this.renderStep3Html();
                 break;
+            case 4:
+                html += this.renderStep4Html();
+                break;
+            default:
+                html += this.renderStep1Html();
         }
+        
+        html += this.renderNavigation();
 
         container.innerHTML = html;
         this.bindStepEvents();
@@ -87,27 +87,8 @@ const WizardModule = {
         const container = document.getElementById('wizardSteps');
         if (!container) return;
 
-        const steps = [
-            { number: 1, label: 'Маршрут', icon: 'fa-route' },
-            { number: 2, label: 'Пилот', icon: 'fa-flag' },
-            { number: 3, label: 'Отчёт', icon: 'fa-file-pdf' }
-        ];
-
-        container.innerHTML = steps.map((step, index) => {
-            const stepNum = index + 1;
-            const isActive = stepNum === this.currentStep;
-            const isCompleted = stepNum < this.currentStep;
-            
-            return `
-                <div class="wizard-step ${isActive ? 'active' : ''} ${isCompleted ? 'completed' : ''}" 
-                     data-step="${stepNum}">
-                    <span class="step-number">
-                        ${isCompleted ? '<i class="fas fa-check"></i>' : step.number}
-                    </span>
-                    <span class="step-label">${step.label}</span>
-                </div>
-            `;
-        }).join('');
+        // Скрываем индикатор шагов (всегда 1 шаг)
+        container.style.display = 'none';
     },
 
     /**
@@ -226,6 +207,12 @@ const WizardModule = {
         switch (this.currentStep) {
             case 1:
                 this.bindStep1Events();
+                // Обновляем кнопки точек взлёта после рендеринга
+                setTimeout(() => {
+                    if (typeof RouteTakeoffPoints !== 'undefined') {
+                        RouteTakeoffPoints.updateAllTakeoffButtons();
+                    }
+                }, 50);
                 break;
             case 2:
                 this.bindStep3Events();  // Step 2: Pilot
@@ -282,7 +269,7 @@ const WizardModule = {
                                 <div>
                                     <div class="route-name">${route.name}</div>
                                     <div class="route-info">
-                                        ${route.distance?.toFixed(1) || 0} км · 
+                                        ${route.distance?.toFixed(1) || 0} км ·
                                         ${route.points?.length || 0} точек
                                     </div>
                                 </div>
@@ -294,6 +281,7 @@ const WizardModule = {
                                         <i class="fas fa-trash"></i>
                                     </button>
                                 </div>
+                                <div class="route-takeoff" data-route-takeoff-btn="${route.id}" style="margin-top: 8px;"></div>
                             </div>
                         `).join('')}
                     </div>
@@ -363,8 +351,18 @@ const WizardModule = {
                         if (route) {
                             this.stepData.route = route;
                             RouteModule.saveRoute(route);
+
                             showToast(`Маршрут "${route.name}" загружен`, 'success');
-                            this.showAnalyzeBlock();
+                            
+                            // Перерисовываем шаг для отображения маршрута в списке
+                            this.renderStepContent();
+                            
+                            // Обновляем кнопки точек взлёта
+                            if (typeof RouteTakeoffPoints !== 'undefined') {
+                                setTimeout(() => {
+                                    RouteTakeoffPoints.updateAllTakeoffButtons();
+                                }, 50);
+                            }
                         }
                     } catch (error) {
                         showToast('Ошибка загрузки KML: ' + error.message, 'error');
@@ -383,8 +381,15 @@ const WizardModule = {
                     this.stepData.route = route;
                     MapModule.setRoute(route);
                     MapModule.fitToRoute(); // Приближение к маршруту
+
                     showToast(`Маршрут "${route.name}" загружен`, 'success');
                     this.showAnalyzeBlock();
+                    
+                    // Отображаем точку взлёта если есть
+                    if (typeof RouteTakeoffPoints !== 'undefined') {
+                        RouteTakeoffPoints.displayRouteTakeoffPoint(routeId);
+                        RouteTakeoffPoints.updateRouteTakeoffButton(routeId);
+                    }
                 }
             });
         });
@@ -393,15 +398,22 @@ const WizardModule = {
         document.querySelectorAll('.saved-route-item').forEach(item => {
             item.addEventListener('click', (e) => {
                 if (e.target.closest('.route-action-btn')) return;
-                
+
                 const routeId = item.dataset.routeId;
                 const route = RouteModule.loadRoute(routeId);
                 if (route) {
                     this.stepData.route = route;
                     MapModule.setRoute(route);
                     MapModule.fitToRoute(); // Приближение к маршруту
+
                     showToast(`Маршрут "${route.name}" выбран`, 'success');
                     this.showAnalyzeBlock();
+                    
+                    // Отображаем точку взлёта если есть
+                    if (typeof RouteTakeoffPoints !== 'undefined') {
+                        RouteTakeoffPoints.displayRouteTakeoffPoint(routeId);
+                        RouteTakeoffPoints.updateRouteTakeoffButton(routeId);
+                    }
                 }
             });
         });
@@ -449,8 +461,19 @@ const WizardModule = {
                         this.stepData.route = route;
                         RouteModule.saveRoute(route);
                         MapModule.setRoute(route);
+
+                        // Очищаем старые маркеры точек взлёта
+                        if (typeof RouteTakeoffPoints !== 'undefined') {
+                            RouteTakeoffPoints.clearAllMarkers();
+                        }
+
                         showToast('Маршрут создан', 'success');
                         this.showAnalyzeBlock();
+                        
+                        // Обновляем кнопки точек взлёта
+                        if (typeof RouteTakeoffPoints !== 'undefined') {
+                            RouteTakeoffPoints.updateAllTakeoffButtons();
+                        }
                     }
                 } catch (error) {
                     showToast('Ошибка создания маршрута', 'error');
@@ -462,51 +485,337 @@ const WizardModule = {
         const analyzeBtn = document.getElementById('analyzeBtn');
         if (analyzeBtn) {
             analyzeBtn.addEventListener('click', async () => {
-                const date = document.getElementById('analysisDate').value;
-                const time = document.getElementById('analysisTime').value;
-                
-                if (!date) {
-                    showToast('Выберите дату', 'error');
-                    return;
-                }
-
-                if (!this.stepData.route || !this.stepData.route.points) {
-                    showToast('Выберите маршрут', 'error');
-                    return;
-                }
-
-                this.stepData.date = date;
-                this.stepData.time = time;
-
-                const loading = document.getElementById('analyzeLoading');
-                loading.style.display = 'block';
-                analyzeBtn.disabled = true;
-
-                try {
-                    RouteModule.createSegments();
-                    this.stepData.segments = RouteModule.segments;
-
-                    await RouteModule.analyzeSegments(date);
-                    this.stepData.segmentAnalysis = RouteModule.segmentAnalysis;
-
-                    const center = this.stepData.route.points[Math.floor(this.stepData.route.points.length / 2)];
-                    const forecast = await WeatherModule.getForecast(center.lat, center.lon, date);
-                    const analyzed = WeatherModule.analyzeForecast(forecast);
-                    this.stepData.forecastData = { forecast, analyzed };
-
-                    showToast('Анализ завершён', 'success');
-                    
-                    setTimeout(() => {
-                        this.nextStep();
-                    }, 500);
-                } catch (error) {
-                    showToast('Ошибка анализа: ' + error.message, 'error');
-                } finally {
-                    loading.style.display = 'none';
-                    analyzeBtn.disabled = false;
-                }
+                await this.analyzeCurrentRoute();
             });
         }
+    },
+
+    /**
+     * Анализ текущего маршрута
+     */
+    async analyzeCurrentRoute() {
+        // Получаем все сохранённые маршруты
+        const allRoutes = typeof RouteModule !== 'undefined' && RouteModule.savedRoutes
+            ? RouteModule.savedRoutes
+            : [];
+
+        if (allRoutes.length === 0) {
+            showToast('Нет сохранённых маршрутов для анализа', 'error');
+            return;
+        }
+
+        const date = this.stepData.date;
+        if (!date) {
+            showToast('Выберите дату анализа', 'error');
+            return;
+        }
+
+        try {
+            // Показываем индикатор загрузки
+            const analyzeBtn = document.getElementById('analyzeBtn');
+            
+            // Создаём и показываем попап с самолётом
+            this.showAnalysisLoadingPopup(allRoutes.length);
+
+            // Анализируем ВСЕ маршруты
+            for (let i = 0; i < allRoutes.length; i++) {
+                const route = allRoutes[i];
+                
+                // Обновляем прогресс
+                this.updateAnalysisProgress(i + 1, allRoutes.length, route.name);
+
+                console.log(`🔍 Анализ маршрута ${i + 1}/${allRoutes.length}:`, route.name);
+
+                // Устанавливаем текущий маршрут
+                if (typeof RouteModule !== 'undefined') {
+                    RouteModule.currentRoute = route;
+                    RouteModule.createSegments(route);
+                }
+
+                // Получаем метео для центра маршрута
+                if (typeof WeatherModule !== 'undefined') {
+                    const centerPoint = route.points[Math.floor(route.points.length / 2)];
+                    await WeatherModule.getForecast(centerPoint.lat, centerPoint.lon, date);
+                }
+
+                // Анализируем сегменты
+                if (typeof RouteModule !== 'undefined' && typeof WeatherModule !== 'undefined') {
+                    await RouteModule.analyzeSegments(date);
+                }
+
+                // Небольшая задержка между маршрутами
+                await new Promise(resolve => setTimeout(resolve, 200));
+            }
+
+            // Сохраняем данные последнего маршрута (для обратной совместимости)
+            if (allRoutes.length > 0) {
+                const lastRoute = allRoutes[allRoutes.length - 1];
+                this.stepData.route = lastRoute;
+                this.stepData.segments = RouteModule.segments;
+                this.stepData.segmentAnalysis = RouteModule.segmentAnalysis;
+            }
+
+            // Обновляем состояние кнопки ДАШБОРД
+            if (typeof DashboardModule !== 'undefined') {
+                DashboardModule.updateButtonState();
+            }
+
+            // Закрываем попап
+            this.hideAnalysisLoadingPopup();
+
+            showToast(`✅ Проанализировано ${allRoutes.length} маршрутов`, 'success');
+
+            // Открываем дашборд сразу после анализа
+            if (typeof DashboardModule !== 'undefined' && typeof DashboardModule.open === 'function') {
+                DashboardModule.open();
+            }
+
+        } catch (error) {
+            console.error('Ошибка анализа:', error);
+            this.hideAnalysisLoadingPopup();
+            showToast('Ошибка анализа: ' + error.message, 'error');
+        }
+    },
+
+    /**
+     * Показ попапа с анимацией самолёта
+     */
+    showAnalysisLoadingPopup(totalRoutes) {
+        const popup = document.createElement('div');
+        popup.id = 'analysisLoadingPopup';
+        popup.className = 'analysis-loading-popup';
+        popup.innerHTML = `
+            <div class="analysis-popup-content">
+                <div class="plane-animation">
+                    <div class="plane-container">
+                        <div class="plane-track">
+                            <div class="plane-icon">✈️</div>
+                        </div>
+                    </div>
+                    <div class="clouds">
+                        <div class="cloud cloud-1">☁️</div>
+                        <div class="cloud cloud-2">☁️</div>
+                        <div class="cloud cloud-3">☁️</div>
+                    </div>
+                </div>
+                <div class="analysis-status">
+                    <h3>Анализ маршрутов</h3>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="analysisProgressFill" style="width: 0%"></div>
+                    </div>
+                    <p class="analysis-text" id="analysisText">
+                        Обработка маршрута 1 из ${totalRoutes}...
+                    </p>
+                    <p class="route-name" id="analysisRouteName"></p>
+                </div>
+            </div>
+        `;
+
+        // Добавляем стили
+        const style = document.createElement('style');
+        style.id = 'analysisPopupStyle';
+        style.textContent = `
+            .analysis-loading-popup {
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                background: rgba(0, 0, 0, 0.7);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                z-index: 10000;
+                animation: fadeIn 0.3s ease;
+            }
+            
+            .analysis-popup-content {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                border-radius: 20px;
+                padding: 40px;
+                text-align: center;
+                box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+                max-width: 400px;
+                animation: slideUp 0.4s ease;
+            }
+            
+            @keyframes fadeIn {
+                from { opacity: 0; }
+                to { opacity: 1; }
+            }
+            
+            @keyframes slideUp {
+                from { transform: translateY(30px); opacity: 0; }
+                to { transform: translateY(0); opacity: 1; }
+            }
+            
+            .plane-animation {
+                position: relative;
+                height: 120px;
+                margin-bottom: 30px;
+                overflow: hidden;
+            }
+            
+            .plane-container {
+                position: relative;
+                height: 100%;
+            }
+            
+            .plane-track {
+                position: absolute;
+                width: 100%;
+                height: 60px;
+                top: 50%;
+                transform: translateY(-50%);
+                animation: planeFly 8s linear infinite;
+            }
+
+            @keyframes planeFly {
+                0% { transform: translateY(-50%) translateX(-150%); }
+                100% { transform: translateY(-50%) translateX(150%); }
+            }
+
+            .plane-icon {
+                font-size: 48px;
+                position: absolute;
+                left: 50%;
+                top: 50%;
+                transform: translate(-50%, -50%);
+                filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.2));
+            }
+            
+            .clouds {
+                position: absolute;
+                top: 0;
+                left: 0;
+                right: 0;
+                bottom: 0;
+                pointer-events: none;
+            }
+            
+            .cloud {
+                position: absolute;
+                font-size: 32px;
+                opacity: 0.6;
+                animation: cloudFloat linear infinite;
+            }
+            
+            .cloud-1 {
+                top: 10%;
+                left: -50px;
+                animation-duration: 8s;
+                animation-delay: 0s;
+            }
+            
+            .cloud-2 {
+                top: 40%;
+                left: -50px;
+                animation-duration: 10s;
+                animation-delay: 2s;
+            }
+            
+            .cloud-3 {
+                top: 70%;
+                left: -50px;
+                animation-duration: 12s;
+                animation-delay: 4s;
+            }
+            
+            @keyframes cloudFloat {
+                from { transform: translateX(0); }
+                to { transform: translateX(400px); }
+            }
+            
+            .analysis-status h3 {
+                color: white;
+                font-size: 20px;
+                margin: 0 0 20px 0;
+                font-weight: 600;
+            }
+            
+            .progress-bar {
+                background: rgba(255, 255, 255, 0.3);
+                border-radius: 10px;
+                height: 8px;
+                overflow: hidden;
+                margin-bottom: 15px;
+            }
+            
+            .progress-fill {
+                background: linear-gradient(90deg, #48bb78 0%, #38a169 100%);
+                height: 100%;
+                transition: width 0.3s ease;
+                border-radius: 10px;
+            }
+            
+            .analysis-text {
+                color: rgba(255, 255, 255, 0.9);
+                font-size: 14px;
+                margin: 0 0 8px 0;
+            }
+            
+            .route-name {
+                color: rgba(255, 255, 255, 0.7);
+                font-size: 12px;
+                margin: 0;
+                font-style: italic;
+            }
+        `;
+
+        document.body.appendChild(style);
+        document.body.appendChild(popup);
+    },
+
+    /**
+     * Обновление прогресса анализа
+     */
+    updateAnalysisProgress(current, total, routeName) {
+        const progressFill = document.getElementById('analysisProgressFill');
+        const analysisText = document.getElementById('analysisText');
+        const routeNameEl = document.getElementById('analysisRouteName');
+
+        if (progressFill) {
+            const percent = ((current - 1) / total) * 100;
+            progressFill.style.width = percent + '%';
+        }
+
+        if (analysisText) {
+            analysisText.textContent = `Обработка маршрута ${current} из ${total}...`;
+        }
+
+        if (routeNameEl) {
+            routeNameEl.textContent = routeName;
+        }
+    },
+
+    /**
+     * Скрытие попапа загрузки
+     */
+    hideAnalysisLoadingPopup() {
+        const popup = document.getElementById('analysisLoadingPopup');
+        const style = document.getElementById('analysisPopupStyle');
+
+        if (popup) {
+            popup.style.animation = 'fadeOut 0.3s ease';
+            setTimeout(() => {
+                if (popup) popup.remove();
+            }, 300);
+        }
+
+        if (style) {
+            style.remove();
+        }
+
+        // Добавляем анимацию исчезновения
+        const fadeStyle = document.createElement('style');
+        fadeStyle.textContent = `
+            @keyframes fadeOut {
+                from { opacity: 1; }
+                to { opacity: 0; }
+            }
+        `;
+        document.head.appendChild(fadeStyle);
+        setTimeout(() => fadeStyle.remove(), 300);
     },
 
     showAnalyzeBlock() {
@@ -974,7 +1283,7 @@ const WizardModule = {
                 container.innerHTML = this.renderVizRisks();
                 break;
             case 'recommendations':
-                console.log('💡 Рендер рекомендаций');
+                console.log('💡 Ренде����� рекомендаци��');
                 container.innerHTML = this.renderVizRecommendations();
                 break;
             case 'details':
@@ -982,7 +1291,7 @@ const WizardModule = {
                 container.innerHTML = this.renderVizDetails();
                 break;
             default:
-                console.log('⚠️ Неизвестная вкладка, рендер таблицы по умолчанию');
+                console.log('⚠️ Неизвестная вкладка, рендер таблицы по у��олчанию');
                 container.innerHTML = this.renderVizTable();
         }
 
@@ -1354,8 +1663,8 @@ const WizardModule = {
                         </div>
                         <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
                             ${this.renderSolarCard('Восход', solar.sunrise, 'fa-sun', '#f59e0b')}
+                            ${this.renderSolarCard('Рабочее', `${solar.workStartTime} – ${solar.workEndTime}`, 'fa-clock', '#38a169')}
                             ${this.renderSolarCard('Закат', solar.sunset, 'fa-moon', '#3b82f6')}
-                            ${this.renderSolarCard('День', solar.dayLengthText, 'fa-clock', '#10b981')}
                             ${this.renderSolarCard('УФ', solar.uvIndex, 'fa-radiation', solar.uvRisk === 'low' ? '#38a169' : solar.uvRisk === 'medium' ? '#d69e2e' : '#e53e3e')}
                         </div>
                     </div>
@@ -1893,7 +2202,7 @@ const WizardModule = {
                             <td style="padding: 12px; font-size: 14px;">${humidity > 80 ? '<span style="color: #ed8936;">⚠️ Повышенная</span>' : '<span style="color: #38a169;">✅ В норме</span>'}</td>
                         </tr>
                         <tr style="border-bottom: 1px solid #e2e8f0;">
-                            <td style="padding: 12px; font-size: 14px; color: #2d3748;"><i class="fas fa-eye"></i> Видимость (км)</td>
+                            <td style="padding: 12px; font-size: 14px; color: #2d3748;"><i class="fas fa-eye"></i> Видимость (��м)</td>
                             <td style="padding: 12px; font-size: 14px; font-weight: 700; color: #2d3748;">${pilotData.visibility || 8}</td>
                             <td style="padding: 12px; font-size: 14px;"><span style="color: #38a169;">✅ В норме</span></td>
                         </tr>
@@ -2023,6 +2332,13 @@ const WizardModule = {
 
         Utils.log('Коррекция применена');
 
+        // Обновляем дашборд с новыми данными
+        if (typeof DashboardModule !== 'undefined') {
+            DashboardModule.updateTabsAvailability();
+            DashboardModule.updateButtonState();
+            console.log('✅ Дашборд обновлён после коррекции');
+        }
+
         // Переключаем на вкладку результатов
         this.currentTab = 'recommendations';
         this.currentVizTab = 'table';
@@ -2033,7 +2349,7 @@ const WizardModule = {
         // Инициализируем контент после рендера (ОДИН раз)
         setTimeout(() => {
             this.initStep3AnalysisTabs();
-            this.renderVizContent(); // ✅ Используем новую функцию
+            this.renderVizContent(); // �� Используем новую функцию
         }, 300);
     },
 
@@ -2076,7 +2392,7 @@ const WizardModule = {
         const tabs = document.querySelectorAll('.analysis-tab[data-tab]');
         console.log('🔍 Найдено вкладок:', tabs.length);
 
-        // Флаг для предотвращения повторной инициализации
+        // Флаг для предотвращения повторной иниц��ализа��ии
         if (this.step3TabsInitialized) {
             console.log('⚠️ Вкладки уже инициализированы');
             return;
@@ -2128,7 +2444,7 @@ const WizardModule = {
 
         return `
             <div class="tab-content-block">
-                <!-- ✅ Блок статуса -->
+                <!-- ��� Блок статуса -->
                 <div class="flight-status ${status.class}" style="margin-bottom: 16px;">
                     <i class="fas ${status.icon}"></i>
                     <span>${status.text}</span>
@@ -2567,47 +2883,28 @@ const WizardModule = {
      * Шаг 4: HTML
      */
     renderStep4Html() {
-        const summary = RouteModule.getRouteSummary();
+        const fullReport = RouteModule.getFullReport();
         const hasPilotData = this.stepData.pilotData !== null;
+
+        if (fullReport.length === 0) {
+            return `
+                <div class="step-content">
+                    <h3 style="margin-bottom: 16px; color: #2d3748;">
+                        <i class="fas fa-file-pdf" style="color: #667eea;"></i> Итоговый отчёт
+                    </h3>
+                    <div style="text-align: center; padding: 40px; color: rgba(0,0,0,0.5);">
+                        <i class="fas fa-folder-open" style="font-size: 48px; margin-bottom: 16px; opacity: 0.3;"></i>
+                        <p>Нет данных для отчёта. Проведите анализ маршрутов.</p>
+                    </div>
+                </div>
+            `;
+        }
 
         return `
             <div class="step-content">
                 <h3 style="margin-bottom: 16px; color: #2d3748;">
                     <i class="fas fa-file-pdf" style="color: #667eea;"></i> Итоговый отчёт
                 </h3>
-
-                <div style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%); 
-                            border-radius: 12px; padding: 16px; margin-bottom: 16px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                        <span style="font-size: 16px; font-weight: 700; color: #2d3748;">
-                            ${RouteModule.currentRoute?.name || 'Маршрут'}
-                        </span>
-                        <span class="badge badge-${summary?.overallRisk === 'high' ? 'danger' : summary?.overallRisk === 'medium' ? 'warn' : 'ok'}">
-                            ${summary?.overallRisk === 'high' ? 'ВЫСОКИЙ РИСК' : summary?.overallRisk === 'medium' ? 'СРЕДНИЙ РИСК' : 'НИЗКИЙ РИСК'}
-                        </span>
-                    </div>
-                    
-                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
-                        <div style="text-align: center;">
-                            <div style="font-size: 20px; font-weight: 700; color: #2d3748;">
-                                ${summary?.totalDistance || 0}
-                            </div>
-                            <div style="font-size: 11px; color: rgba(0,0,0,0.6); text-transform: uppercase;">км</div>
-                        </div>
-                        <div style="text-align: center;">
-                            <div style="font-size: 20px; font-weight: 700; color: #2d3748;">
-                                ${summary?.flightTime || 0}
-                            </div>
-                            <div style="font-size: 11px; color: rgba(0,0,0,0.6); text-transform: uppercase;">мин</div>
-                        </div>
-                        <div style="text-align: center;">
-                            <div style="font-size: 20px; font-weight: 700; color: #2d3748;">
-                                ${summary?.totalSegments || 0}
-                            </div>
-                            <div style="font-size: 11px; color: rgba(0,0,0,0.6); text-transform: uppercase;">сегментов</div>
-                        </div>
-                    </div>
-                </div>
 
                 ${hasPilotData ? `
                     <div style="padding: 12px; background: rgba(56, 161, 105, 0.1); border-radius: 10px; margin-bottom: 16px;">
@@ -2618,21 +2915,17 @@ const WizardModule = {
                     </div>
                 ` : ''}
 
-                <div class="recommendations-block" style="margin-bottom: 16px;">
-                    <div class="recommendations-header">
-                        <i class="fas fa-clipboard-list"></i>
-                        <span>Итоговые рекомендации</span>
-                    </div>
-                    <div class="recommendations-content" id="finalRecommendations">
-                        ${this.renderFinalRecommendations()}
-                    </div>
-                </div>
+                <!-- Отчёт по каждому маршруту -->
+                ${fullReport.map((report, index) => this.renderRouteReport(report, index)).join('')}
 
-                <div style="display: flex; gap: 12px;">
+                <div style="display: flex; gap: 12px; margin-top: 24px;">
                     <button type="button" class="action-btn" id="exportPdfBtn" style="flex: 1;">
                         <i class="fas fa-file-pdf"></i> Экспорт PDF
                     </button>
-                    <button type="button" class="action-btn" id="newAnalysisBtn" 
+                    <button type="button" class="action-btn" id="printReportBtn" style="flex: 1;">
+                        <i class="fas fa-print"></i> Печать
+                    </button>
+                    <button type="button" class="action-btn" id="newAnalysisBtn"
                             style="background: linear-gradient(135deg, rgba(56, 161, 105, 0.8) 0%, rgba(38, 166, 154, 0.8) 100%);">
                         <i class="fas fa-redo"></i> Новый анализ
                     </button>
@@ -2641,38 +2934,160 @@ const WizardModule = {
         `;
     },
 
-    renderFinalRecommendations() {
-        const recommendations = [];
-        const analysis = this.stepData.segmentAnalysis[0]?.analyzed;
+    /**
+     * Отрисовка отчёта по одному маршруту
+     */
+    renderRouteReport(report, index) {
+        const { route, analysisDate, segmentAnalysis, pilotData, meteorology, flightWindows, recommendations } = report;
+        const dateStr = analysisDate ? new Date(analysisDate).toLocaleDateString('ru-RU', { 
+            day: 'numeric', month: 'long', year: 'numeric' 
+        }) : '—';
 
-        if (analysis) {
-            const baseRecs = WeatherModule.generateRecommendations(analysis, this.stepData.pilotData);
-            recommendations.push(...baseRecs);
-        }
+        const overallRisk = segmentAnalysis?.[0]?.riskLevel || 'low';
+        const riskLabels = { low: 'НИЗКИЙ', medium: 'СРЕДНИЙ', high: 'ВЫСОКИЙ' };
+        const riskColors = { low: 'ok', medium: 'warn', high: 'danger' };
 
-        const summary = RouteModule.getRouteSummary();
-        if (summary?.overallRisk === 'high') {
-            recommendations.unshift({
-                type: 'critical',
-                icon: 'fa-exclamation-triangle',
-                text: '<strong>Высокий общий риск</strong> по маршруту. Рекомендуется перенести полёт.'
-            });
-        }
+        // Метеоданные
+        const hourly = meteorology?.hourly?.[0];
+        const temp = hourly?.temp2m !== undefined ? `${hourly.temp2m >= 0 ? '+' : ''}${Math.round(hourly.temp2m)}°C` : '—';
+        const wind = hourly?.wind10m !== undefined ? `${hourly.wind10m.toFixed(1)} м/с` : '—';
+        const visibility = hourly?.visibility !== undefined ? `${hourly.visibility} км` : '—';
+        const precip = hourly?.precip !== undefined ? `${hourly.precip.toFixed(1)} мм` : '—';
 
-        if (recommendations.length === 0) {
-            recommendations.push({
-                type: 'success',
-                icon: 'fa-check-circle',
-                text: '<strong>Все параметры в норме</strong>. Полёт разрешён с соблюдением стандартных ограничений.'
-            });
-        }
+        // Окна безопасности
+        const safeWindows = flightWindows?.filter(w => w.risk === 'low') || [];
 
-        return recommendations.map(rec => `
-            <div class="recommendation-item ${rec.type}">
-                <i class="fas ${rec.icon}"></i>
-                <span class="recommendation-text">${rec.text}</span>
+        return `
+            <div class="route-report-block" style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
+                        border-radius: 12px; padding: 16px; margin-bottom: 24px; border: 1px solid rgba(102, 126, 234, 0.15);">
+                
+                <!-- Заголовок маршрута -->
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 2px solid rgba(102, 126, 234, 0.2);">
+                    <div>
+                        <div style="font-size: 18px; font-weight: 700; color: #2d3748; margin-bottom: 4px;">
+                            <i class="fas fa-route" style="color: #667eea;"></i> ${route.name}
+                        </div>
+                        <div style="font-size: 12px; color: rgba(0,0,0,0.6);">
+                            📅 ${dateStr}
+                        </div>
+                    </div>
+                    <span class="badge badge-${riskColors[overallRisk]}">
+                        ${riskLabels[overallRisk] || '—'} РИСК
+                    </span>
+                </div>
+
+                <!-- Параметры маршрута -->
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px;">
+                    <div style="text-align: center; padding: 12px; background: rgba(255,255,255,0.5); border-radius: 8px;">
+                        <div style="font-size: 10px; color: rgba(0,0,0,0.6); text-transform: uppercase;">Длина</div>
+                        <div style="font-size: 18px; font-weight: 700; color: #2d3748;">${route.distance?.toFixed(1) || 0} км</div>
+                    </div>
+                    <div style="text-align: center; padding: 12px; background: rgba(255,255,255,0.5); border-radius: 8px;">
+                        <div style="font-size: 10px; color: rgba(0,0,0,0.6); text-transform: uppercase;">Время</div>
+                        <div style="font-size: 18px; font-weight: 700; color: #2d3748;">${route.flightTime || 0} мин</div>
+                    </div>
+                    <div style="text-align: center; padding: 12px; background: rgba(255,255,255,0.5); border-radius: 8px;">
+                        <div style="font-size: 10px; color: rgba(0,0,0,0.6); text-transform: uppercase;">Сегменты</div>
+                        <div style="font-size: 18px; font-weight: 700; color: #2d3748;">${segmentAnalysis?.length || 0}</div>
+                    </div>
+                    <div style="text-align: center; padding: 12px; background: rgba(255,255,255,0.5); border-radius: 8px;">
+                        <div style="font-size: 10px; color: rgba(0,0,0,0.6); text-transform: uppercase;">Тип</div>
+                        <div style="font-size: 14px; font-weight: 600; color: #2d3748;">${route.type === 'kml' ? 'KML' : 'Ручной'}</div>
+                    </div>
+                </div>
+
+                <!-- Метеоанализ -->
+                <div style="margin-bottom: 16px;">
+                    <div style="font-size: 14px; font-weight: 700; color: #2d3748; margin-bottom: 10px;">
+                        <i class="fas fa-cloud-sun" style="color: #f59e0b;"></i> Метеоанализ
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
+                        <div style="padding: 10px; background: rgba(59, 130, 246, 0.1); border-radius: 8px; border: 1px solid rgba(59, 130, 246, 0.2);">
+                            <div style="font-size: 10px; color: rgba(0,0,0,0.6); text-transform: uppercase;">🌡️ Температура</div>
+                            <div style="font-size: 16px; font-weight: 700; color: #2d3748;">${temp}</div>
+                        </div>
+                        <div style="padding: 10px; background: rgba(16, 185, 129, 0.1); border-radius: 8px; border: 1px solid rgba(16, 185, 129, 0.2);">
+                            <div style="font-size: 10px; color: rgba(0,0,0,0.6); text-transform: uppercase;">💨 Ветер</div>
+                            <div style="font-size: 16px; font-weight: 700; color: #2d3748;">${wind}</div>
+                        </div>
+                        <div style="padding: 10px; background: rgba(245, 158, 11, 0.1); border-radius: 8px; border: 1px solid rgba(245, 158, 11, 0.2);">
+                            <div style="font-size: 10px; color: rgba(0,0,0,0.6); text-transform: uppercase;">👁️ Видимость</div>
+                            <div style="font-size: 16px; font-weight: 700; color: #2d3748;">${visibility}</div>
+                        </div>
+                        <div style="padding: 10px; background: rgba(139, 92, 246, 0.1); border-radius: 8px; border: 1px solid rgba(139, 92, 246, 0.2);">
+                            <div style="font-size: 10px; color: rgba(0,0,0,0.6); text-transform: uppercase;">🌧️ Осадки</div>
+                            <div style="font-size: 16px; font-weight: 700; color: #2d3748;">${precip}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Данные пилота -->
+                ${pilotData ? `
+                    <div style="margin-bottom: 16px;">
+                        <div style="font-size: 14px; font-weight: 700; color: #2d3748; margin-bottom: 10px;">
+                            <i class="fas fa-user-pilot" style="color: #38a169;"></i> Данные пилота
+                        </div>
+                        <div style="padding: 12px; background: rgba(56, 161, 105, 0.1); border-radius: 8px; border: 1px solid rgba(56, 161, 105, 0.2);">
+                            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
+                                <div>
+                                    <div style="font-size: 10px; color: rgba(0,0,0,0.6);">📍 Координаты</div>
+                                    <div style="font-size: 13px; font-weight: 600; color: #2d3748;">${pilotData.lat?.toFixed(4) || '—'}, ${pilotData.lon?.toFixed(4) || '—'}</div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 10px; color: rgba(0,0,0,0.6);">💨 Ветер</div>
+                                    <div style="font-size: 13px; font-weight: 600; color: #2d3748;">${pilotData.windSpeed || '—'} м/с ${pilotData.windDir ? '(' + pilotData.windDir + '°)' : ''}</div>
+                                </div>
+                                <div>
+                                    <div style="font-size: 10px; color: rgba(0,0,0,0.6);">🌡️ Температура</div>
+                                    <div style="font-size: 13px; font-weight: 600; color: #2d3748;">${pilotData.temp || '—'}</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                ` : ''}
+
+                <!-- Окна безопасности -->
+                <div style="margin-bottom: 16px;">
+                    <div style="font-size: 14px; font-weight: 700; color: #2d3748; margin-bottom: 10px;">
+                        <i class="fas fa-clock" style="color: #10b981;"></i> Окна безопасности
+                    </div>
+                    ${safeWindows.length > 0 ? `
+                        <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                            ${safeWindows.map(w => `
+                                <span style="padding: 6px 12px; background: rgba(56, 161, 105, 0.15); border: 1px solid rgba(56, 161, 105, 0.3); border-radius: 6px; font-size: 12px; color: #276749; font-weight: 600;">
+                                    ${w.start} – ${w.end} (${w.duration} ч)
+                                </span>
+                            `).join('')}
+                        </div>
+                    ` : `
+                        <div style="padding: 10px; background: rgba(237, 137, 54, 0.1); border-radius: 8px; font-size: 12px; color: #c05621;">
+                            <i class="fas fa-exclamation-triangle"></i> Безопасные окна не найдены
+                        </div>
+                    `}
+                </div>
+
+                <!-- Рекомендации -->
+                <div style="margin-bottom: 16px;">
+                    <div style="font-size: 14px; font-weight: 700; color: #2d3748; margin-bottom: 10px;">
+                        <i class="fas fa-clipboard-list" style="color: #667eea;"></i> Рекомендации
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 8px;">
+                        ${recommendations?.length > 0 ? recommendations.map(rec => `
+                            <div style="padding: 10px 12px; background: ${rec.type === 'success' ? 'rgba(56, 161, 105, 0.1)' : rec.type === 'warning' ? 'rgba(237, 137, 54, 0.1)' : rec.type === 'critical' ? 'rgba(229, 62, 62, 0.1)' : 'rgba(59, 130, 246, 0.1)'}; 
+                                        border-left: 3px solid ${rec.type === 'success' ? '#38a169' : rec.type === 'warning' ? '#ed8936' : rec.type === 'critical' ? '#e53e3e' : '#3b82f6'}; 
+                                        border-radius: 6px; font-size: 12px; color: #2d3748;">
+                                <i class="fas ${rec.icon}" style="color: ${rec.type === 'success' ? '#38a169' : rec.type === 'warning' ? '#ed8936' : rec.type === 'critical' ? '#e53e3e' : '#3b82f6'};"></i>
+                                <span style="margin-left: 8px;">${rec.text}</span>
+                            </div>
+                        `).join('') : `
+                            <div style="padding: 10px; background: rgba(56, 161, 105, 0.1); border-radius: 8px; font-size: 12px; color: #276749;">
+                                <i class="fas fa-check-circle"></i> Все параметры в норме
+                            </div>
+                        `}
+                    </div>
+                </div>
             </div>
-        `).join('');
+        `;
     },
 
     /**

@@ -182,19 +182,22 @@ const MultiRouteWizardIntegration = {
             });
         }
 
-        // Кнопка анализа всех маршрутов
+        // Кнопка анализа всех маршрутов — ПЕРЕХВАТЧИК
         const analyzeBtn = document.getElementById('analyzeBtn');
         if (analyzeBtn) {
-            const originalHandler = analyzeBtn.onclick;
+            // Удаляем все существующие обработчики и добавляем наш
+            const newBtn = analyzeBtn.cloneNode(true);
+            analyzeBtn.parentNode.replaceChild(newBtn, analyzeBtn);
 
-            analyzeBtn.onclick = async () => {
-                if (originalHandler) {
-                    await originalHandler();
-                }
-
-                // Запуск мульти-маршрут оптимизации
+            newBtn.addEventListener('click', async (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                console.log('🔍 Запуск анализа всех маршрутов...');
+                
+                // Запуск мульти-маршрут анализа
                 await MultiRouteWizardIntegration.analyzeAllRoutes();
-            };
+            });
         }
     },
 
@@ -284,6 +287,13 @@ const MultiRouteWizardIntegration = {
      * Анализ всех маршрутов
      */
     async analyzeAllRoutes() {
+        // Проверка: MultiRouteModule загружен
+        if (typeof MultiRouteModule === 'undefined') {
+            showToast('MultiRouteModule не загружен', 'error');
+            console.error('❌ MultiRouteModule не определён');
+            return;
+        }
+
         const date = document.getElementById('analysisDate')?.value;
         if (!date) {
             showToast('Выберите дату анализа', 'error');
@@ -311,48 +321,65 @@ const MultiRouteWizardIntegration = {
         if (analyzeBtn) analyzeBtn.disabled = true;
 
         try {
-            // 1. Основной анализ для ПЕРВОГО маршрута (для совместимости)
-            const firstRoute = routes[0];
-            WizardModule.stepData.route = firstRoute;
+            console.log('🌤️ НАЧАЛО АНАЛИЗА ВСЕХ МАРШРУТОВ:', routes.length, 'маршрутов');
 
-            RouteModule.createSegments();
-            await RouteModule.analyzeSegments(date);
+            // 1. Анализ ВСЕХ маршрутов по очереди
+            const allRouteAnalyses = [];
 
-            WizardModule.stepData.segments = RouteModule.segments;
-            WizardModule.stepData.segmentAnalysis = RouteModule.segmentAnalysis;
-
-            // 2. Анализ ВСЕХ остальных маршрутов
-            console.log('🌤️ Анализ всех маршрутов:', routes.length);
-
-            for (let i = 1; i < routes.length; i++) {
+            for (let i = 0; i < routes.length; i++) {
                 const route = routes[i];
-                console.log(`🌤️ Анализ маршрута ${i + 1}:`, route.name);
+                console.log(`🌤️ Анализ маршрута ${i + 1}/${routes.length}:`, route.name);
+
+                // Преобразуем маршрут из MultiRoute формата (segments) в RouteModule формат (points)
+                const points = route.segments.map(s => ({ lat: s.lat, lon: s.lon }));
+                const routeForAnalysis = {
+                    id: route.id,
+                    name: route.name,
+                    points: points
+                };
 
                 // Устанавливаем маршрут как текущий
-                RouteModule.currentRoute = route;
+                RouteModule.currentRoute = routeForAnalysis;
 
                 // Создаём сегменты для этого маршрута
-                RouteModule.createSegments();
+                RouteModule.createSegments(routeForAnalysis);
 
                 // Анализируем сегменты
                 await RouteModule.analyzeSegments(date);
 
                 // Сохраняем анализ для этого маршрута
-                route.segmentAnalysis = RouteModule.segmentAnalysis;
+                const routeAnalysis = [...RouteModule.segmentAnalysis];
+                route.segmentAnalysis = routeAnalysis;
+                allRouteAnalyses.push(routeAnalysis);
 
-                console.log(`✅ Маршрут ${i + 1} проанализирован:`, RouteModule.segmentAnalysis.length, 'сегментов');
+                console.log(`✅ Маршрут ${i + 1} проанализирован:`, routeAnalysis.length, 'сегментов');
             }
 
-            // 3. Мульти-маршрут анализ (все маршруты + все точки)
-            if (typeof MultiRouteModule !== 'undefined') {
-                const weatherData = WeatherModule.cachedData;
-                const assignment = MultiRouteModule.optimizeAssignment(weatherData);
+            // 2. Основной анализ для ПЕРВОГО маршрута (для совместимости с WizardModule)
+            const firstRoute = routes[0];
+            WizardModule.stepData.route = firstRoute;
+            WizardModule.stepData.segments = firstRoute.segments || RouteModule.segments;
+            WizardModule.stepData.segmentAnalysis = allRouteAnalyses[0];
 
-                console.log('✅ Мульти-маршрут оптимизация:', assignment);
+            console.log('✅ Основной анализ сохранён для 1-го маршрута:', firstRoute.name);
+
+            // 3. Мульти-маршрут анализ (все маршруты + все точки + загрузка метео для баз)
+            const weatherData = WeatherModule.cachedData;
+
+            // Запускаем оптимизацию с загрузкой метео для каждой базы
+            const assignment = await MultiRouteModule.optimizeAssignment(weatherData, date);
+
+            console.log('✅ Мульти-маршрут оптимизация:', assignment);
+
+            // 4. Активация дашборда
+            if (typeof DashboardModule !== 'undefined') {
+                DashboardModule.updateButtonState();
+                console.log('✅ Дашборд активирован');
             }
 
             showToast('Анализ завершён', 'success');
 
+            // Переход к следующему шагу
             setTimeout(() => {
                 WizardModule.nextStep();
             }, 500);

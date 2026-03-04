@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MIRA - Тест инструментов карты</title>
+    
+    <!-- OpenLayers -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v9.2.4/ol.css">
+    <script src="https://cdn.jsdelivr.net/npm/ol@v9.2.4/dist/ol.js"></script>
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #1a1a2e;
+            color: #fff;
+        }
+        
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+        
+        /* Карта */
+        .map-wrapper {
+            flex: 1;
+            position: relative;
+        }
+        
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+        
+        /* Панель инструментов */
+        .map-tools {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .tool-btn {
+            padding: 12px 16px;
+            border: none;
+            border-radius: 8px;
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.9) 0%, rgba(118, 75, 162, 0.9) 100%);
+            color: white;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+        }
+        
+        .tool-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+        
+        .tool-btn.active {
+            background: linear-gradient(135deg, #38a169 0%, #276749 100%);
+            box-shadow: 0 0 20px rgba(56, 161, 105, 0.5);
+        }
+        
+        .tool-btn.danger {
+            background: linear-gradient(135deg, #e53e3e 0%, #c53030 100%);
+        }
+        
+        /* Боковая панель */
+        .side-panel {
+            width: 350px;
+            background: rgba(255, 255, 255, 0.05);
+            border-left: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            overflow-y: auto;
+        }
+        
+        .side-panel h2 {
+            font-size: 18px;
+            margin-bottom: 20px;
+            color: #667eea;
+        }
+        
+        .info-block {
+            background: rgba(102, 126, 234, 0.1);
+            border: 1px solid rgba(102, 126, 234, 0.2);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .info-block h3 {
+            font-size: 14px;
+            margin-bottom: 10px;
+            color: #667eea;
+        }
+        
+        .info-block p {
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.8);
+            line-height: 1.6;
+        }
+        
+        .measurement-result {
+            background: rgba(56, 161, 105, 0.15);
+            border: 1px solid rgba(56, 161, 105, 0.3);
+            border-radius: 8px;
+            padding: 12px;
+            margin-top: 10px;
+        }
+        
+        .measurement-result .value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #38a169;
+        }
+        
+        .measurement-result .label {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.7);
+        }
+        
+        /* Popup стили */
+        .ol-popup {
+            position: absolute;
+            background: white;
+            border-radius: 8px;
+            padding: 10px 15px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            min-width: 150px;
+            transform: translate(-50%, -100%);
+        }
+        
+        .ol-popup-content {
+            color: #2d3748;
+            font-size: 13px;
+        }
+        
+        .ol-popup-closer {
+            position: absolute;
+            top: 2px;
+            right: 5px;
+            cursor: pointer;
+            font-size: 18px;
+            color: #666;
+        }
+        
+        /* Tooltip */
+        .tooltip {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            pointer-events: none;
+            z-index: 1001;
+            white-space: nowrap;
+        }
+        
+        /* Scale bar */
+        .scale-line {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+        
+        .scale-line-inner {
+            background: rgba(0, 0, 0, 0.6);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            border: 2px solid white;
+            border-top: none;
+        }
+        
+        /* Instructions */
+        .instructions {
+            background: rgba(237, 137, 54, 0.1);
+            border: 1px solid rgba(237, 137, 54, 0.3);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .instructions h3 {
+            font-size: 14px;
+            margin-bottom: 10px;
+            color: #ed8936;
+        }
+        
+        .instructions ul {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.8);
+            padding-left: 20px;
+            line-height: 1.8;
+        }
+        
+        /* Layer switcher */
+        .layer-switcher {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.7);
+            border-radius: 8px;
+            padding: 10px;
+        }
+        
+        .layer-btn {
+            display: block;
+            width: 100%;
+            padding: 8px 12px;
+            margin: 4px 0;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            background: transparent;
+            color: white;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .layer-btn:hover,
+        .layer-btn.active {
+            background: rgba(102, 126, 234, 0.5);
+            border-color: #667eea;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Карта -->
+        <div class="map-wrapper">
+            <div id="map"></div>
+            
+            <!-- Панель инструментов -->
+            <div class="map-tools">
+                <button class="tool-btn" id="btnCircle" onclick="toggleTool('circle')">
+                    <i class="fas fa-circle"></i> Круг 60 км
+                </button>
+                <button class="tool-btn" id="btnRuler" onclick="toggleTool('ruler')">
+                    <i class="fas fa-ruler"></i> Линейка
+                </button>
+                <button class="tool-btn" id="btnPolygon" onclick="toggleTool('polygon')">
+                    <i class="fas fa-draw-polygon"></i> Полигон
+                </button>
+                <button class="tool-btn" id="btnAzimuth" onclick="toggleTool('azimuth')">
+                    <i class="fas fa-compass"></i> Азимут
+                </button>
+                <button class="tool-btn danger" onclick="clearAll()">
+                    <i class="fas fa-trash"></i> Очистить
+                </button>
+            </div>
+            
+            <!-- Переключатель слоёв -->
+            <div class="layer-switcher">
+                <button class="layer-btn active" onclick="setBaseLayer('osm')">OSM</button>
+                <button class="layer-btn" onclick="setBaseLayer('satellite')">Спутник</button>
+                <button class="layer-btn" onclick="setBaseLayer('terrain')">Рельеф</button>
+            </div>
+            
+            <!-- Масштабная линейка -->
+            <div class="scale-line">
+                <div class="scale-line-inner" id="scaleBar">10 км</div>
+            </div>
+        </div>
+        
+        <!-- Боковая панель -->
+        <div class="side-panel">
+            <h2><i class="fas fa-tools"></i> Инструменты карты</h2>
+            
+            <div class="info-block">
+                <h3><i class="fas fa-info-circle"></i> Описание</h3>
+                <p>Тестовая страница демонстрирует инструменты для работы с картой на базе OpenLayers.</p>
+            </div>
+            
+            <div class="instructions" id="instructions">
+                <h3><i class="fas fa-question-circle"></i> Как использовать</h3>
+                <ul>
+                    <li>Выберите инструмент из панели слева</li>
+                    <li>Кликните на карту для начала работы</li>
+                    <li>Следуйте инструкциям для выбранного инструмента</li>
+                </ul>
+            </div>
+            
+            <div id="measurementsPanel"></div>
+        </div>
+    </div>
+    
+    <!-- Tooltip -->
+    <div class="tooltip" id="tooltip" style="display: none;"></div>
+
+    <script>
+        // ============================================
+        // ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ
+        // ============================================
+        let map;
+        let baseLayers = {};
+        let toolLayers = {};
+        let currentTool = null;
+        let activeInteractions = [];
+        
+        // Состояние инструментов
+        const toolState = {
+            circle: { active: false, center: null, feature: null },
+            ruler: { active: false, points: [], features: [] },
+            polygon: { active: false, points: [], feature: null, drawing: false },
+            azimuth: { active: false, startPoint: null, endPoint: null, features: [] }
+        };
+        
+        // ============================================
+        // ИНИЦИАЛИЗАЦИЯ КАРТЫ
+        // ============================================
+        function initMap() {
+            // Базовые слои
+            baseLayers.osm = new ol.layer.Tile({
+                source: new ol.source.OSM(),
+                visible: true
+            });
+            
+            baseLayers.satellite = new ol.layer.Tile({
+                source: new ol.source.XYZ({
+                    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+                    attributions: 'Tiles © Esri'
+                }),
+                visible: false
+            });
+            
+            baseLayers.terrain = new ol.layer.Tile({
+                source: new ol.source.XYZ({
+                    url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Terrain_Base/MapServer/tile/{z}/{y}/{x}',
+                    attributions: 'Tiles © Esri'
+                }),
+                visible: false
+            });
+            
+            // Слои инструментов
+            toolLayers.circle = new ol.layer.Vector({
+                source: new ol.source.Vector(),
+                visible: false
+            });
+            
+            toolLayers.ruler = new ol.layer.Vector({
+                source: new ol.source.Vector(),
+                visible: false
+            });
+            
+            toolLayers.polygon = new ol.layer.Vector({
+                source: new ol.source.Vector(),
+                visible: false
+            });
+            
+            toolLayers.azimuth = new ol.layer.Vector({
+                source: new ol.source.Vector(),
+                visible: false
+            });
+            
+            // Представление
+            const view = new ol.View({
+                center: ol.proj.fromLonLat([37.6173, 55.7558]), // Москва
+                zoom: 10,
+                minZoom: 3,
+                maxZoom: 18
+            });
+            
+            // Карта
+            map = new ol.Map({
+                target: 'map',
+                layers: [
+                    baseLayers.osm, baseLayers.satellite, baseLayers.terrain,
+                    toolLayers.circle, toolLayers.ruler, toolLayers.polygon, toolLayers.azimuth
+                ],
+                view: view
+            });
+            
+            // Обновление масштабной линейки
+            map.getView().on('change:resolution', updateScaleBar);
+            updateScaleBar();
+            
+            console.log('✅ Карта инициализирована');
+        }
+        
+        // ============================================
+        // ПЕРЕКЛЮЧЕНИЕ СЛОЁВ
+        // ============================================
+        function setBaseLayer(layerName) {
+            Object.keys(baseLayers).forEach(name => {
+                baseLayers[name].setVisible(name === layerName);
+            });
+            
+            document.querySelectorAll('.layer-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+        }
+        
+        // ============================================
+        // МАСШТАБНАЯ ЛИНЕЙКА
+        // ============================================
+        function updateScaleBar() {
+            const resolution = map.getView().getResolution();
+            const width = 100; // пикселей
+            const meters = resolution * width;
+            
+            let value, unit;
+            if (meters >= 1000) {
+                value = (meters / 1000).toFixed(meters >= 10000 ? 0 : 1);
+                unit = 'км';
+            } else {
+                value = meters.toFixed(0);
+                unit = 'м';
+            }
+            
+            document.getElementById('scaleBar').textContent = `${value} ${unit}`;
+        }
+        
+        // ============================================
+        // ПЕРЕКЛЮЧЕНИЕ ИНСТРУМЕНТОВ
+        // ============================================
+        function toggleTool(toolName) {
+            // Если инструмент уже активен - отключаем
+            if (currentTool === toolName) {
+                deactivateTool();
+                return;
+            }
+            
+            // Отключаем текущий инструмент
+            deactivateTool();
+            
+            // Включаем новый
+            currentTool = toolName;
+            toolLayers[toolName].setVisible(true);
+            
+            // Подсветка кнопки
+            document.querySelectorAll('.tool-btn').forEach(btn => btn.classList.remove('active'));
+            const btnId = 'btn' + toolName.charAt(0).toUpperCase() + toolName.slice(1);
+            document.getElementById(btnId).classList.add('active');
+            
+            // Активация инструмента
+            activateTool(toolName);
+        }
+        
+        function deactivateTool() {
+            if (!currentTool) return;
+            
+            // Удаляем все взаимодействия
+            map.getInteractions().forEach(function(interaction) {
+                if (activeInteractions.includes(interaction)) {
+                    map.removeInteraction(interaction);
+                }
+            });
+            activeInteractions = [];
+            
+            // Скрываем слой
+            toolLayers[currentTool].setVisible(false);
+            
+            // Сброс кнопки
+            const btnId = 'btn' + currentTool.charAt(0).toUpperCase() + currentTool.slice(1);
+            const btn = document.getElementById(btnId);
+            if (btn) btn.classList.remove('active');
+            
+            currentTool = null;
+            updateInstructions();
+        }
+        
+        function activateTool(toolName) {
+            updateInstructions();
+            
+            if (toolName === 'circle') {
+                activateCircleTool();
+            } else if (toolName === 'ruler') {
+                activateRulerTool();
+            } else if (toolName === 'polygon') {
+                activatePolygonTool();
+            } else if (toolName === 'azimuth') {
+                activateAzimuthTool();
+            }
+        }
+        
+        // ============================================
+        // ИНСТРУМЕНТ: КРУГ 60 КМ
+        // ============================================
+        function activateCircleTool() {
+            const clickHandler = function(evt) {
+                const coord = evt.coordinate;
+                const lonLat = ol.proj.toLonLat(coord);
+                
+                // Удаляем предыдущий круг
+                toolLayers.circle.getSource().clear();
+                
+                // Создаём круг радиусом 60 км
+                const circle = new ol.geom.Circle(coord, 60000);
+                const feature = new ol.Feature({ geometry: circle });
+                
+                feature.setStyle(new ol.style.Style({
+                    fill: new ol.style.Fill({
+                        color: 'rgba(102, 126, 234, 0.15)'
+                    }),
+                    stroke: new ol.style.Stroke({
+                        color: '#667eea',
+                        width: 2,
+                        lineDash: [10, 10]
+                    })
+                }));
+                
+                toolLayers.circle.getSource().addFeature(feature);
+                toolState.circle.center = lonLat;
+
+                showMeasurement('circle', {
+                    lat: lonLat[1].toFixed(4),
+                    lon: lonLat[0].toFixed(4),
+                    radius: 60,
+                    area: (Math.PI * 60 * 60).toFixed(1)
+                });
+            };
+            
+            const interaction = new ol.interaction.Select({ condition: ol.events.condition.click });
+            map.on('click', clickHandler);
+            activeInteractions.push(clickHandler);
+        }
+        
+        // ============================================
+        // ИНСТРУМЕНТ: ЛИНЕЙКА
+        // ============================================
+        function activateRulerTool() {
+            const clickHandler = function(evt) {
+                const coord = evt.coordinate;
+                const state = toolState.ruler;
+
+                state.points.push(coord);
+
+                if (state.points.length === 1) {
+                    const marker = new ol.Feature({
+                        geometry: new ol.geom.Point(coord)
+                    });
+                    marker.setStyle(new ol.style.Style({
+                        image: new ol.style.Circle({
+                            radius: 6,
+                            fill: new ol.style.Fill({ color: '#667eea' }),
+                            stroke: new ol.style.Stroke({ color: '#fff', width: 2 })
+                        })
+                    }));
+                    toolLayers.ruler.getSource().addFeature(marker);
+                    state.features.push(marker);
+
+                    showMeasurement('ruler', { segments: 0, totalDistance: 0 });
+                } else {
+                    const prev = state.points[state.points.length - 2];
+                    const distance = calculateDistance(prev, coord);
+
+                    let totalDistance = 0;
+                    for (let i = 1; i < state.points.length; i++) {
+                        totalDistance += calculateDistance(state.points[i-1], state.points[i]);
+                    }
+
+                    const line = new ol.geom.LineString(state.points);
+                    const lineFeature = new ol.Feature({ geometry: line });
+                    lineFeature.setStyle(new ol.style.Style({
+                        stroke: new ol.style.Stroke({
+                            color: '#38a169',
+                            width: 3
+                        })
+                    }));
+                    toolLayers.ruler.getSource().addFeature(lineFeature);
+                    state.features.push(lineFeature);
+
+                    const marker = new ol.Feature({
+                        geometry: new ol.geom.Point(coord)
+                    });
+                    marker.setStyle(new ol.style.Style({
+                        image: new ol.style.Circle({
+                            radius: 6,
+                            fill: new ol.style.Fill({ color: '#38a169' }),
+                            stroke: new ol.style.Stroke({ color: '#fff', width: 2 })
+                        })
+                    }));
+                    toolLayers.ruler.getSource().addFeature(marker);
+                    state.features.push(marker);
+
+                    const labelFeature = new ol.Feature({
+                        geometry: new ol.geom.Point(coord)
+                    });
+                    labelFeature.setStyle(new ol.style.Style({
+                        text: new ol.style.Text({
+                            text: distance.toFixed(2) + ' км\nВсего: ' + totalDistance.toFixed(2) + ' км',
+                            font: 'bold 12px Segoe UI',
+                            fill: new ol.style.Fill({ color: '#fff' }),
+                            stroke: new ol.style.Stroke({ color: '#000', width: 3 }),
+                            backgroundFill: new ol.style.Fill({ color: 'rgba(0,0,0,0.7)' }),
+                            padding: [4, 8, 4, 8],
+                            offsetY: -20
+                        })
+                    }));
+                    toolLayers.ruler.getSource().addFeature(labelFeature);
+                    state.features.push(labelFeature);
+
+                    showMeasurement('ruler', { segments: state.points.length - 1, totalDistance: totalDistance });
+                }
+            };
+
+            map.on('click', clickHandler);
+            activeInteractions.push(clickHandler);
+        }
+        
+        // ============================================
+        // ИНСТРУМЕНТ: ПОЛИГОН
+        // ============================================
+        function activatePolygonTool() {
+            const clickHandler = function(evt) {
+                const coord = evt.coordinate;
+                const state = toolState.polygon;
+                
+                if (!state.drawing) {
+                    state.drawing = true;
+                    state.points = [coord];
+                    
+                    state.feature = new ol.Feature({
+                        geometry: new ol.geom.Polygon([state.points])
+                    });
+                    state.feature.setStyle(new ol.style.Style({
+                        fill: new ol.style.Fill({ color: 'rgba(237, 137, 54, 0.2)' }),
+                        stroke: new ol.style.Stroke({
+                            color: '#ed8936',
+                            width: 2,
+                            lineDash: [10, 10]
+                        }),
+                        image: new ol.style.Circle({
+                            radius: 6,
+                            fill: new ol.style.Fill({ color: '#ed8936' })
+                        })
+                    }));
+                    
+                    toolLayers.polygon.getSource().addFeature(state.feature);
+                } else {
+                    state.points.push(coord);
+                    state.feature.getGeometry().setCoordinates([state.points]);
+                    
+                    const firstPoint = state.points[0];
+                    const dist = Math.sqrt(
+                        Math.pow(coord[0] - firstPoint[0], 2) + 
+                        Math.pow(coord[1] - firstPoint[1], 2)
+                    );
+                    
+                    if (dist < 10 && state.points.length > 2) {
+                        state.feature.getGeometry().closeRing(0);
+                        state.drawing = false;
+                        
+                        const area = calculatePolygonArea(state.points);
+                        const perimeter = calculatePolygonPerimeter(state.points);
+                        
+                        showMeasurement('polygon', {
+                            points: state.points.length,
+                            area: area,
+                            perimeter: perimeter
+                        });
+                    }
+                }
+            };
+            
+            map.on('click', clickHandler);
+            activeInteractions.push(clickHandler);
+        }
+        
+        // ============================================
+        // ИНСТРУМЕНТ: АЗИМУТ
+        // ============================================
+        function activateAzimuthTool() {
+            const clickHandler = function(evt) {
+                const coord = evt.coordinate;
+
+                if (!toolState.azimuth.startPoint) {
+                    toolState.azimuth.startPoint = coord;
+
+                    const marker = new ol.Feature({
+                        geometry: new ol.geom.Point(coord)
+                    });
+                    marker.setStyle(new ol.style.Style({
+                        image: new ol.style.Circle({
+                            radius: 8,
+                            fill: new ol.style.Fill({ color: '#667eea' }),
+                            stroke: new ol.style.Stroke({ color: '#fff', width: 2 })
+                        })
+                    }));
+                    toolLayers.azimuth.getSource().addFeature(marker);
+                    toolState.azimuth.features.push(marker);
+                } else {
+                    const distance = calculateDistance(toolState.azimuth.startPoint, coord);
+                    const azimuth = calculateAzimuth(toolState.azimuth.startPoint, coord);
+
+                    const line = new ol.geom.LineString([toolState.azimuth.startPoint, coord]);
+                    const lineFeature = new ol.Feature({ geometry: line });
+                    lineFeature.setStyle(new ol.style.Style({
+                        stroke: new ol.style.Stroke({
+                            color: '#e53e3e',
+                            width: 3,
+                            lineDash: [10, 5]
+                        })
+                    }));
+                    toolLayers.azimuth.getSource().addFeature(lineFeature);
+                    toolState.azimuth.features.push(lineFeature);
+
+                    const endMarker = new ol.Feature({
+                        geometry: new ol.geom.Point(coord)
+                    });
+                    endMarker.setStyle(new ol.style.Style({
+                        image: new ol.style.Circle({
+                            radius: 6,
+                            fill: new ol.style.Fill({ color: '#e53e3e' }),
+                            stroke: new ol.style.Stroke({ color: '#fff', width: 2 })
+                        })
+                    }));
+                    toolLayers.azimuth.getSource().addFeature(endMarker);
+                    toolState.azimuth.features.push(endMarker);
+
+                    const midCoord = [
+                        (toolState.azimuth.startPoint[0] + coord[0]) / 2,
+                        (toolState.azimuth.startPoint[1] + coord[1]) / 2
+                    ];
+                    const labelFeature = new ol.Feature({
+                        geometry: new ol.geom.Point(midCoord)
+                    });
+                    labelFeature.setStyle(new ol.style.Style({
+                        text: new ol.style.Text({
+                            text: 'Азимут: ' + azimuth.toFixed(1) + '°\nРасстояние: ' + distance.toFixed(2) + ' км',
+                            font: 'bold 12px Segoe UI',
+                            fill: new ol.style.Fill({ color: '#fff' }),
+                            stroke: new ol.style.Stroke({ color: '#000', width: 3 }),
+                            backgroundFill: new ol.style.Fill({ color: 'rgba(0,0,0,0.8)' }),
+                            padding: [4, 8, 4, 8],
+                            offsetY: -25
+                        })
+                    }));
+                    toolLayers.azimuth.getSource().addFeature(labelFeature);
+                    toolState.azimuth.features.push(labelFeature);
+
+                    showMeasurement('azimuth', { azimuth: azimuth, distance: distance });
+                    
+                    // Сброс после завершения
+                    toolState.azimuth.startPoint = null;
+                    toolState.azimuth.endPoint = null;
+                }
+            };
+
+            map.on('click', clickHandler);
+            activeInteractions.push(clickHandler);
+        }
+        
+        // ============================================
+        // ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+        // ============================================
+        function calculateDistance(coord1, coord2) {
+            // Конвертируем из проекции Mercator в градусы
+            const point1 = ol.proj.toLonLat(coord1);
+            const point2 = ol.proj.toLonLat(coord2);
+            
+            const R = 6371; // Радиус Земли в км
+            const dLat = toRad(point2[1] - point1[1]);
+            const dLon = toRad(point2[0] - point1[0]);
+            const lat1 = toRad(point1[1]);
+            const lat2 = toRad(point2[1]);
+
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.sin(dLon/2) * Math.sin(dLon/2) * Math.cos(lat1) * Math.cos(lat2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        }
+        
+        function calculateAzimuth(coord1, coord2) {
+            // Конвертируем из проекции Mercator в градусы
+            const point1 = ol.proj.toLonLat(coord1);
+            const point2 = ol.proj.toLonLat(coord2);
+            
+            const lat1 = toRad(point1[1]);
+            const lat2 = toRad(point2[1]);
+            const dLon = toRad(point2[0] - point1[0]);
+
+            const y = Math.sin(dLon) * Math.cos(lat2);
+            const x = Math.cos(lat1) * Math.sin(lat2) -
+                      Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLon);
+
+            let azimuth = toDeg(Math.atan2(y, x));
+            azimuth = (azimuth + 360) % 360;
+            return azimuth;
+        }
+        
+        function calculatePolygonArea(coords) {
+            let area = 0;
+            const R = 6371;
+            
+            for (let i = 0; i < coords.length; i++) {
+                const j = (i + 1) % coords.length;
+                const lon1 = toRad(coords[i][0]);
+                const lon2 = toRad(coords[j][0]);
+                const lat1 = toRad(ol.proj.toLonLat(coords[i])[1]);
+                const lat2 = toRad(ol.proj.toLonLat(coords[j])[1]);
+                
+                area += (lon2 - lon1) * (2 + Math.sin(lat1) + Math.sin(lat2));
+            }
+            
+            return Math.abs(area * R * R / 2).toFixed(2);
+        }
+        
+        function calculatePolygonPerimeter(coords) {
+            let perimeter = 0;
+            for (let i = 0; i < coords.length - 1; i++) {
+                const p1 = ol.proj.toLonLat(coords[i]);
+                const p2 = ol.proj.toLonLat(coords[i + 1]);
+                perimeter += calculateDistance(p1, p2);
+            }
+            const p1 = ol.proj.toLonLat(coords[coords.length - 1]);
+            const p2 = ol.proj.toLonLat(coords[0]);
+            perimeter += calculateDistance(p1, p2);
+            
+            return perimeter.toFixed(2);
+        }
+        
+        function toRad(deg) {
+            return deg * Math.PI / 180;
+        }
+        
+        function toDeg(rad) {
+            return rad * 180 / Math.PI;
+        }
+        
+        function showMeasurement(tool, data) {
+            const panel = document.getElementById('measurementsPanel');
+            let html = '';
+            
+            if (tool === 'circle') {
+                html = '<div class="measurement-result">' +
+                    '<div class="label"><i class="fas fa-circle"></i> Круг 60 км</div>' +
+                    '<div style="margin-top: 8px; font-size: 13px;">' +
+                    '<div>Центр: ' + data.lat + ', ' + data.lon + '</div>' +
+                    '<div>Радиус: <span class="value">' + data.radius + ' км</span></div>' +
+                    '<div>Площадь: <span class="value">' + data.area + ' км²</span></div>' +
+                    '</div></div>';
+            } else if (tool === 'ruler') {
+                const totalDist = data.totalDistance || 0;
+                const segments = data.segments || 0;
+                html = '<div class="measurement-result">' +
+                    '<div class="label"><i class="fas fa-ruler"></i> Линейка</div>' +
+                    '<div style="margin-top: 8px; font-size: 13px;">' +
+                    '<div>Сегментов: ' + segments + '</div>' +
+                    '<div>Общее расстояние: <span class="value">' + totalDist.toFixed(2) + ' км</span></div>' +
+                    '</div></div>';
+            } else if (tool === 'polygon') {
+                const points = data.points || 0;
+                const area = data.area || 0;
+                const perimeter = data.perimeter || 0;
+                html = '<div class="measurement-result">' +
+                    '<div class="label"><i class="fas fa-draw-polygon"></i> Полигон</div>' +
+                    '<div style="margin-top: 8px; font-size: 13px;">' +
+                    '<div>Вершин: ' + points + '</div>' +
+                    '<div>Площадь: <span class="value">' + area + ' км²</span></div>' +
+                    '<div>Периметр: <span class="value">' + perimeter + ' км</span></div>' +
+                    '</div></div>';
+            } else if (tool === 'azimuth') {
+                const azimuth = data.azimuth || 0;
+                const distance = data.distance || 0;
+                html = '<div class="measurement-result">' +
+                    '<div class="label"><i class="fas fa-compass"></i> Азимут</div>' +
+                    '<div style="margin-top: 8px; font-size: 13px;">' +
+                    '<div>Азимут: <span class="value">' + azimuth.toFixed(1) + '°</span></div>' +
+                    '<div>Расстояние: <span class="value">' + distance.toFixed(2) + ' км</span></div>' +
+                    '</div></div>';
+            }
+            
+            panel.innerHTML = html;
+        }
+        
+        function updateInstructions() {
+            const instructions = document.getElementById('instructions');
+            const instr = {
+                circle: {
+                    title: 'Круг 60 км',
+                    steps: [
+                        'Кликните на карту чтобы установить центр круга',
+                        'Круг радиусом 60 км покажет зону полётов',
+                        'Повторный клик переместит круг'
+                    ]
+                },
+                ruler: {
+                    title: 'Линейка',
+                    steps: [
+                        'Кликните для установки первой точки',
+                        'Кликайте для добавления сегментов',
+                        'Двойной клик завершит измерение'
+                    ]
+                },
+                polygon: {
+                    title: 'Полигон',
+                    steps: [
+                        'Кликните для начала рисования',
+                        'Добавляйте вершины кликами',
+                        'Кликните рядом с первой точкой для завершения'
+                    ]
+                },
+                azimuth: {
+                    title: 'Азимут',
+                    steps: [
+                        'Кликните для установки начальной точки',
+                        'Кликните второй раз для конечной точки',
+                        'Получите азимут и расстояние'
+                    ]
+                }
+            };
+            
+            if (currentTool && instr[currentTool]) {
+                const data = instr[currentTool];
+                instructions.innerHTML = '<h3><i class="fas fa-location-arrow"></i> ' + data.title + '</h3>' +
+                    '<ul>' + data.steps.map(function(s) { return '<li>' + s + '</li>'; }).join('') + '</ul>';
+            } else {
+                instructions.innerHTML = '<h3><i class="fas fa-question-circle"></i> Как использовать</h3>' +
+                    '<ul>' +
+                    '<li>Выберите инструмент из панели слева</li>' +
+                    '<li>Кликните на карту для начала работы</li>' +
+                    '<li>Следуйте инструкциям для выбранного инструмента</li>' +
+                    '</ul>';
+            }
+        }
+        
+        function clearAll() {
+            deactivateTool();
+            Object.keys(toolLayers).forEach(function(key) {
+                toolLayers[key].getSource().clear();
+            });
+            document.getElementById('measurementsPanel').innerHTML = '';
+            updateInstructions();
+        }
+        
+        // ============================================
+        // ЗАПУСК
+        // ============================================
+        initMap();
+    </script>
+</body>
+</html>

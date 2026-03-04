@@ -1,0 +1,2212 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#1a1a2e">
+    <title>MIRA - UAV Meteorological Scoring System</title>
+
+    <!-- OpenLayers -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v9.2.4/ol.css">
+    <script src="https://cdn.jsdelivr.net/npm/ol@v9.2.4/dist/ol.js"></script>
+
+    <!-- Plotly.js -->
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+    <!-- pdfmake для экспорта PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.66/pdfmake.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.66/vfs_fonts.js"></script>
+
+    <style>
+        /* ========== MIRA DESIGN SYSTEM ========== */
+        :root {
+            --primary-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            --success-gradient: linear-gradient(135deg, #38a169 0%, #26a69a 100%);
+            --warning-gradient: linear-gradient(135deg, #ed8936 0%, #dd6b20 100%);
+            --danger-gradient: linear-gradient(135deg, #e53e3e 0%, #c53030 100%);
+            --bg-gradient: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 100%);
+            --card-bg: rgba(255, 255, 255, 0.98);
+            --card-border: rgba(0, 0, 0, 0.08);
+            --text-primary: #2d3748;
+            --text-secondary: #4a5568;
+            --text-muted: rgba(0, 0, 0, 0.5);
+            --success-bg: rgba(56, 161, 105, 0.15);
+            --success-border: rgba(56, 161, 105, 0.5);
+            --success-text: #22543d;
+            --warning-bg: rgba(237, 137, 54, 0.15);
+            --warning-border: rgba(237, 137, 54, 0.5);
+            --warning-text: #744210;
+            --danger-bg: rgba(229, 62, 62, 0.15);
+            --danger-border: rgba(229, 62, 62, 0.5);
+            --danger-text: #742a2a;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-gradient);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* ========== LAYOUT ========== */
+        .scoring-container {
+            display: grid;
+            grid-template-columns: 380px 1fr;
+            grid-template-rows: 60px 1fr;
+            height: 100vh;
+            gap: 0;
+        }
+
+        /* ========== HEADER ========== */
+        .header {
+            grid-column: 1 / -1;
+            background: var(--primary-gradient);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+            z-index: 1000;
+        }
+
+        .header-title {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .header-title i {
+            font-size: 24px;
+        }
+
+        .header-title h1 {
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+        }
+
+        .header-title span {
+            font-size: 12px;
+            opacity: 0.8;
+            font-weight: 400;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 12px;
+        }
+
+        .header-btn {
+            padding: 10px 16px;
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+        }
+
+        .header-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            transform: translateY(-1px);
+        }
+
+        /* ========== LEFT PANEL ========== */
+        .left-panel {
+            background: var(--card-bg);
+            border-right: 1px solid rgba(0, 0, 0, 0.1);
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* ========== RIGHT PANEL ========== */
+        .right-panel {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.95) 0%, rgba(248, 250, 252, 0.95) 100%);
+            display: grid;
+            grid-template-rows: 1fr 320px;
+            gap: 0;
+            overflow: hidden;
+        }
+
+        .map-section {
+            position: relative;
+            overflow: hidden;
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+
+        .charts-section {
+            border-top: 1px solid rgba(0, 0, 0, 0.1);
+            background: var(--card-bg);
+            padding: 16px;
+            overflow-y: auto;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+        }
+
+        /* ========== CARDS ========== */
+        .card {
+            background: rgba(0, 0, 0, 0.02);
+            border-radius: 12px;
+            border: 1px solid var(--card-border);
+            overflow: hidden;
+            transition: all 0.3s;
+        }
+
+        .card:hover {
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .card-header {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+            padding: 12px 16px;
+            border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .card-header i {
+            color: #667eea;
+            font-size: 14px;
+        }
+
+        .card-header h3 {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text-primary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .card-body {
+            padding: 16px;
+        }
+
+        /* ========== FORM ELEMENTS ========== */
+        .form-group {
+            margin-bottom: 14px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 11px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            font-weight: 600;
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .form-group label i {
+            color: #667eea;
+            font-size: 12px;
+        }
+
+        .form-control {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid rgba(0, 0, 0, 0.15);
+            border-radius: 8px;
+            font-size: 14px;
+            background: rgba(255, 255, 255, 0.9);
+            transition: all 0.2s;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+        }
+
+        select.form-control {
+            cursor: pointer;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        /* ========== BUTTONS ========== */
+        .btn {
+            padding: 12px 16px;
+            border: none;
+            border-radius: 10px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: var(--primary-gradient);
+            color: white;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-primary:active {
+            transform: scale(0.98);
+        }
+
+        .btn-success {
+            background: var(--success-gradient);
+            color: white;
+            box-shadow: 0 4px 15px rgba(56, 161, 105, 0.3);
+        }
+
+        .btn-warning {
+            background: var(--warning-gradient);
+            color: white;
+            box-shadow: 0 4px 15px rgba(237, 137, 54, 0.3);
+        }
+
+        .btn-danger {
+            background: var(--danger-gradient);
+            color: white;
+            box-shadow: 0 4px 15px rgba(229, 62, 62, 0.3);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.8) 0%, rgba(118, 75, 162, 0.8) 100%);
+            color: white;
+        }
+
+        .btn-block {
+            width: 100%;
+        }
+
+        .btn-sm {
+            padding: 8px 12px;
+            font-size: 12px;
+        }
+
+        /* ========== SCORE DISPLAY ========== */
+        .score-display {
+            text-align: center;
+            padding: 20px;
+        }
+
+        .score-circle {
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            background: conic-gradient(var(--score-color, #38a169) var(--score-percent, 0%), rgba(0, 0, 0, 0.1) 0);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 16px;
+            position: relative;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+        }
+
+        .score-circle::before {
+            content: '';
+            position: absolute;
+            width: 110px;
+            height: 110px;
+            border-radius: 50%;
+            background: white;
+        }
+
+        .score-value {
+            position: relative;
+            z-index: 1;
+        }
+
+        .score-value .number {
+            font-size: 42px;
+            font-weight: 700;
+            color: var(--text-primary);
+            line-height: 1;
+        }
+
+        .score-value .label {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            margin-top: 4px;
+        }
+
+        .score-status {
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .score-status.allowed {
+            background: var(--success-bg);
+            color: var(--success-text);
+            border: 1px solid var(--success-border);
+        }
+
+        .score-status.restricted {
+            background: var(--warning-bg);
+            color: var(--warning-text);
+            border: 1px solid var(--warning-border);
+        }
+
+        .score-status.forbidden {
+            background: var(--danger-bg);
+            color: var(--danger-text);
+            border: 1px solid var(--danger-border);
+        }
+
+        /* ========== RISK BREAKDOWN ========== */
+        .risk-breakdown {
+            display: grid;
+            gap: 12px;
+        }
+
+        .risk-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .risk-item .icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+        }
+
+        .risk-item .icon.wind { background: rgba(79, 195, 247, 0.2); color: #4fc3f7; }
+        .risk-item .icon.precip { background: rgba(255, 183, 77, 0.2); color: #ffb74d; }
+        .risk-item .icon.vis { background: rgba(129, 199, 132, 0.2); color: #81c784; }
+        .risk-item .icon.temp { background: rgba(186, 104, 200, 0.2); color: #ba68c8; }
+        .risk-item .icon.icing { background: rgba(100, 181, 246, 0.2); color: #64b5f6; }
+        .risk-item .icon.turb { background: rgba(229, 115, 115, 0.2); color: #e57373; }
+
+        .risk-item .details {
+            flex: 1;
+        }
+
+        .risk-item .name {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+        }
+
+        .risk-bar {
+            height: 6px;
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+
+        .risk-bar .fill {
+            height: 100%;
+            border-radius: 3px;
+            transition: width 0.5s ease;
+        }
+
+        .risk-bar .fill.low { background: #38a169; }
+        .risk-bar .fill.medium { background: #ed8936; }
+        .risk-bar .fill.high { background: #e53e3e; }
+
+        .risk-item .value {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text-primary);
+            min-width: 30px;
+            text-align: right;
+        }
+
+        /* ========== PARAM GRID ========== */
+        .param-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+        }
+
+        .param-card {
+            background: rgba(0, 0, 0, 0.03);
+            border-radius: 12px;
+            padding: 12px 10px;
+            text-align: center;
+            border: 1px solid rgba(0, 0, 0, 0.05);
+            transition: all 0.3s;
+        }
+
+        .param-card:active {
+            background: rgba(0, 0, 0, 0.06);
+        }
+
+        .param-card i {
+            font-size: 18px;
+            margin-bottom: 6px;
+        }
+
+        .param-card:nth-child(1) i { color: #4fc3f7; }
+        .param-card:nth-child(2) i { color: #ffb74d; }
+        .param-card:nth-child(3) i { color: #81c784; }
+        .param-card:nth-child(4) i { color: #ba68c8; }
+        .param-card:nth-child(5) i { color: #e57373; }
+        .param-card:nth-child(6) i { color: #64b5f6; }
+
+        .param-card .value {
+            display: block;
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+
+        .param-card .label {
+            display: block;
+            font-size: 10px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        .param-card .badge {
+            display: inline-block;
+            margin-top: 6px;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 9px;
+            font-weight: 700;
+            text-transform: uppercase;
+        }
+
+        .badge-ok { background: rgba(56, 161, 105, 0.2); color: #276749; }
+        .badge-warn { background: rgba(237, 137, 54, 0.2); color: #c05621; }
+        .badge-danger { background: rgba(229, 62, 62, 0.2); color: #c53030; }
+
+        /* ========== FLIGHT WINDOWS ========== */
+        .flight-windows {
+            display: grid;
+            gap: 8px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .flight-window {
+            background: linear-gradient(135deg, rgba(56, 161, 105, 0.1) 0%, rgba(38, 166, 154, 0.1) 100%);
+            border: 1px solid rgba(56, 161, 105, 0.3);
+            border-radius: 8px;
+            padding: 10px 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 12px;
+        }
+
+        .flight-window i {
+            color: #38a169;
+            margin-right: 8px;
+        }
+
+        .flight-window .time {
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .flight-window .duration {
+            color: var(--text-muted);
+        }
+
+        /* ========== CHART CONTAINER ========== */
+        .chart-container {
+            background: rgba(0, 0, 0, 0.02);
+            border-radius: 10px;
+            border: 1px solid rgba(0, 0, 0, 0.05);
+            height: 200px;
+            position: relative;
+        }
+
+        .chart-container.loading::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(90deg, rgba(102, 126, 234, 0.1) 0%, rgba(102, 126, 234, 0.15) 50%, rgba(102, 126, 234, 0.1) 100%);
+            background-size: 200% 100%;
+            animation: skeleton-loading 1.5s infinite;
+            border-radius: 10px;
+        }
+
+        @keyframes skeleton-loading {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+
+        /* ========== TOAST ========== */
+        .toast {
+            position: fixed;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%) translateY(-100px);
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 14px 28px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            transition: all 0.4s;
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .toast.show {
+            transform: translateX(-50%) translateY(0);
+            opacity: 1;
+        }
+
+        .toast i {
+            font-size: 18px;
+        }
+
+        .toast.success i { color: #38a169; }
+        .toast.error i { color: #e53e3e; }
+        .toast.warning i { color: #ed8936; }
+        .toast.info i { color: #667eea; }
+
+        /* ========== LOADING OVERLAY ========== */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(5px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+
+        .loading-overlay.active {
+            display: flex;
+        }
+
+        .loading-spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            color: white;
+            margin-top: 16px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        /* ========== MAP CONTROLS ========== */
+        .ol-popup {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 10px;
+            padding: 12px 16px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            min-width: 200px;
+        }
+
+        .ol-popup h4 {
+            font-size: 13px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            color: var(--text-primary);
+        }
+
+        .ol-popup p {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin: 4px 0;
+        }
+
+        /* ========== SECTION TITLE ========== */
+        .section-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .section-title i {
+            color: #667eea;
+        }
+
+        /* ========== RECOMMENDATIONS ========== */
+        .recommendations-list {
+            display: grid;
+            gap: 10px;
+        }
+
+        .recommendation-item {
+            background: rgba(255, 255, 255, 0.8);
+            border-left: 3px solid #667eea;
+            padding: 12px;
+            border-radius: 0 8px 8px 0;
+            font-size: 13px;
+            color: var(--text-secondary);
+            display: flex;
+            gap: 10px;
+        }
+
+        .recommendation-item i {
+            color: #667eea;
+            font-size: 14px;
+            margin-top: 2px;
+        }
+
+        /* ========== SCROLLBAR ========== */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.05);
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(102, 126, 234, 0.5);
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(102, 126, 234, 0.7);
+        }
+
+        /* ========== LAYER SELECTOR ========== */
+        .layer-selector {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 1000;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            padding: 12px 16px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .layer-selector label {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        .layer-selector select {
+            width: 100%;
+            padding: 6px 10px;
+            border-radius: 6px;
+            border: 1px solid rgba(0, 0, 0, 0.15);
+            background: rgba(255, 255, 255, 0.9);
+            font-size: 11px;
+            color: var(--text-primary);
+            cursor: pointer;
+        }
+
+        /* ========== GEO BUTTON ========== */
+        .geo-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 48px;
+            height: 48px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 14px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            transition: all 0.3s;
+            z-index: 1000;
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .geo-btn i {
+            font-size: 18px;
+            color: #667eea;
+        }
+
+        .geo-btn:hover {
+            transform: scale(1.05);
+        }
+
+        .geo-btn:active {
+            transform: scale(0.95);
+        }
+
+        /* ========== TABS ========== */
+        .tabs {
+            display: flex;
+            gap: 4px;
+            background: rgba(0, 0, 0, 0.03);
+            padding: 4px;
+            border-radius: 10px;
+            margin-bottom: 16px;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 10px 14px;
+            text-align: center;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .tab.active {
+            background: var(--primary-gradient);
+            color: white;
+        }
+
+        .tab:hover:not(.active) {
+            background: rgba(255, 255, 255, 0.5);
+        }
+
+        /* ========== TAB CONTENT ========== */
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="scoring-container">
+        <!-- ========== HEADER ========== -->
+        <header class="header">
+            <div class="header-title">
+                <i class="fas fa-meteor"></i>
+                <div>
+                    <h1>MIRA</h1>
+                    <span>UAV Meteorological Scoring System</span>
+                </div>
+            </div>
+            <div class="header-actions">
+                <button class="header-btn" onclick="ScoringSystem.loadConfig()">
+                    <i class="fas fa-folder-open"></i> Загрузить
+                </button>
+                <button class="header-btn" onclick="ScoringSystem.saveConfig()">
+                    <i class="fas fa-save"></i> Сохранить
+                </button>
+                <button class="header-btn" onclick="ScoringSystem.exportPDF()">
+                    <i class="fas fa-file-pdf"></i> Экспорт PDF
+                </button>
+            </div>
+        </header>
+
+        <!-- ========== LEFT PANEL ========== -->
+        <aside class="left-panel">
+            <!-- UAV Configuration -->
+            <div class="card">
+                <div class="card-header">
+                    <i class="fas fa-plane"></i>
+                    <h3>Конфигурация БПЛА</h3>
+                </div>
+                <div class="card-body">
+                    <div class="form-group">
+                        <label><i class="fas fa-tag"></i> Тип БПЛА</label>
+                        <select id="uavType" class="form-control" onchange="ScoringSystem.onUavTypeChange()">
+                            <option value="multirotor">Мультиротор</option>
+                            <option value="fixedwing">Самолётного типа</option>
+                            <option value="hybrid">Гибридный</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label><i class="fas fa-box"></i> Категория</label>
+                        <select id="uavCategory" class="form-control">
+                            <option value="micro">Микро (< 250г)</option>
+                            <option value="light">Лёгкий (< 7кг)</option>
+                            <option value="medium">Средний (< 25кг)</option>
+                            <option value="heavy">Тяжёлый (> 25кг)</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label><i class="fas fa-wind"></i> Макс. ветер (м/с)</label>
+                            <input type="number" id="maxWind" class="form-control" value="10" step="0.5" min="0">
+                        </div>
+                        <div class="form-group">
+                            <label><i class="fas fa-cloud-rain"></i> Макс. осадки (мм/ч)</label>
+                            <input type="number" id="maxPrecip" class="form-control" value="1" step="0.1" min="0">
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label><i class="fas fa-eye"></i> Мин. видимость (км)</label>
+                            <input type="number" id="minVisibility" class="form-control" value="2" step="0.5" min="0">
+                        </div>
+                        <div class="form-group">
+                            <label><i class="fas fa-thermometer"></i> Темп. диапазон (°C)</label>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <input type="number" id="tempMin" class="form-control" value="-10" step="1" placeholder="Мин">
+                        </div>
+                        <div class="form-group">
+                            <input type="number" id="tempMax" class="form-control" value="35" step="1" placeholder="Макс">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Mission Profile -->
+            <div class="card" style="border: 2px solid rgba(102, 126, 234, 0.3);">
+                <div class="card-header" style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);">
+                    <i class="fas fa-bullseye"></i>
+                    <h3>Профиль Миссии</h3>
+                </div>
+                <div class="card-body">
+                    <!-- Главная кнопка - сразу метео + анализ -->
+                    <button class="btn btn-primary btn-block" id="analyzeBtn" onclick="ScoringSystem.getMeteoAndAnalyze()" style="margin-bottom: 16px; padding: 18px 24px; font-size: 17px; font-weight: 700; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);">
+                        <i class="fas fa-cloud-sun" style="font-size: 20px;"></i>
+                        <span style="margin-left: 8px;">🚀 ЗАПУСТИТЬ АНАЛИЗ</span>
+                    </button>
+                    
+                    <div class="form-group">
+                        <label><i class="fas fa-tasks"></i> Тип миссии</label>
+                        <select id="missionType" class="form-control" onchange="ScoringSystem.onMissionTypeChange()">
+                            <option value="visual">Визуальный осмотр</option>
+                            <option value="cargo">Доставка грузов</option>
+                            <option value="emergency">Экстренная миссия</option>
+                            <option value="agriculture">Сельское хозяйство</option>
+                            <option value="mapping">Картография</option>
+                            <option value="surveillance">Наблюдение</option>
+                        </select>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label><i class="fas fa-arrows-alt"></i> Рабочая высота (м)</label>
+                            <input type="number" id="workAltitude" class="form-control" value="100" step="10" min="0">
+                        </div>
+                        <div class="form-group">
+                            <label><i class="fas fa-route"></i> Дальность (км)</label>
+                            <input type="number" id="missionRange" class="form-control" value="5" step="1" min="0">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label><i class="fas fa-clock"></i> Время миссии (мин)</label>
+                        <input type="number" id="missionDuration" class="form-control" value="30" step="5" min="5">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Score Display -->
+            <div class="card">
+                <div class="card-header">
+                    <i class="fas fa-chart-pie"></i>
+                    <h3>Интегральная Оценка</h3>
+                </div>
+                <div class="card-body">
+                    <div class="score-display">
+                        <div class="score-circle" id="scoreCircle" style="--score-color: #38a169; --score-percent: 0%;">
+                            <div class="score-value">
+                                <div class="number" id="scoreNumber">0.0</div>
+                                <div class="label">из 10</div>
+                            </div>
+                        </div>
+                        <div class="score-status allowed" id="scoreStatus">
+                            <i class="fas fa-check-circle"></i>
+                            <span>Анализ...</span>
+                        </div>
+                    </div>
+
+                    <div class="risk-breakdown" id="riskBreakdown">
+                        <div class="risk-item">
+                            <div class="icon wind"><i class="fas fa-wind"></i></div>
+                            <div class="details">
+                                <div class="name">Ветер</div>
+                                <div class="risk-bar"><div class="fill low" id="riskWindBar" style="width: 0%"></div></div>
+                            </div>
+                            <div class="value" id="riskWindValue">0</div>
+                        </div>
+                        <div class="risk-item">
+                            <div class="icon precip"><i class="fas fa-cloud-rain"></i></div>
+                            <div class="details">
+                                <div class="name">Осадки</div>
+                                <div class="risk-bar"><div class="fill low" id="riskPrecipBar" style="width: 0%"></div></div>
+                            </div>
+                            <div class="value" id="riskPrecipValue">0</div>
+                        </div>
+                        <div class="risk-item">
+                            <div class="icon vis"><i class="fas fa-eye"></i></div>
+                            <div class="details">
+                                <div class="name">Видимость</div>
+                                <div class="risk-bar"><div class="fill low" id="riskVisBar" style="width: 0%"></div></div>
+                            </div>
+                            <div class="value" id="riskVisValue">0</div>
+                        </div>
+                        <div class="risk-item">
+                            <div class="icon temp"><i class="fas fa-thermometer"></i></div>
+                            <div class="details">
+                                <div class="name">Температура</div>
+                                <div class="risk-bar"><div class="fill low" id="riskTempBar" style="width: 0%"></div></div>
+                            </div>
+                            <div class="value" id="riskTempValue">0</div>
+                        </div>
+                        <div class="risk-item">
+                            <div class="icon icing"><i class="fas fa-snowflake"></i></div>
+                            <div class="details">
+                                <div class="name">Обледенение</div>
+                                <div class="risk-bar"><div class="fill low" id="riskIcingBar" style="width: 0%"></div></div>
+                            </div>
+                            <div class="value" id="riskIcingValue">0</div>
+                        </div>
+                        <div class="risk-item">
+                            <div class="icon turb"><i class="fas fa-wave-square"></i></div>
+                            <div class="details">
+                                <div class="name">Турбулентность</div>
+                                <div class="risk-bar"><div class="fill low" id="riskTurbBar" style="width: 0%"></div></div>
+                            </div>
+                            <div class="value" id="riskTurbValue">0</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Flight Windows -->
+            <div class="card">
+                <div class="card-header">
+                    <i class="fas fa-clock"></i>
+                    <h3>Благоприятные Окна</h3>
+                </div>
+                <div class="card-body">
+                    <div class="flight-windows" id="flightWindows">
+                        <div style="text-align: center; color: var(--text-muted); font-size: 13px; padding: 20px;">
+                            <i class="fas fa-info-circle"></i><br>
+                            Нажмите <b>«🚀 ЗАПУСТИТЬ АНАЛИЗ»</b><br>
+                            для получения метео и расчёта<br>
+                            благоприятных окон
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Current Conditions -->
+            <div class="card">
+                <div class="card-header">
+                    <i class="fas fa-cloud-sun"></i>
+                    <h3>Текущие Условия</h3>
+                </div>
+                <div class="card-body">
+                    <div class="param-grid" id="currentParams">
+                        <div class="param-card">
+                            <i class="fas fa-wind"></i>
+                            <span class="value" id="curWind">--</span>
+                            <span class="label">Ветер 10м</span>
+                            <span class="badge badge-ok" id="badgeWind">--</span>
+                        </div>
+                        <div class="param-card">
+                            <i class="fas fa-wind"></i>
+                            <span class="value" id="curWind500">--</span>
+                            <span class="label">Ветер 500м</span>
+                            <span class="badge badge-ok" id="badgeWind500">--</span>
+                        </div>
+                        <div class="param-card">
+                            <i class="fas fa-eye"></i>
+                            <span class="value" id="curVisibility">--</span>
+                            <span class="label">Видимость</span>
+                            <span class="badge badge-ok" id="badgeVisibility">--</span>
+                        </div>
+                        <div class="param-card">
+                            <i class="fas fa-thermometer-half"></i>
+                            <span class="value" id="curTemp">--</span>
+                            <span class="label">Температура</span>
+                            <span class="badge badge-ok" id="badgeTemp">--</span>
+                        </div>
+                        <div class="param-card">
+                            <i class="fas fa-cloud-rain"></i>
+                            <span class="value" id="curPrecip">--</span>
+                            <span class="label">Осадки</span>
+                            <span class="badge badge-ok" id="badgePrecip">--</span>
+                        </div>
+                        <div class="param-card">
+                            <i class="fas fa-snowflake"></i>
+                            <span class="value" id="curIcing">--</span>
+                            <span class="label">Обледенение</span>
+                            <span class="badge badge-ok" id="badgeIcing">--</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- ========== RIGHT PANEL ========== -->
+        <main class="right-panel">
+            <!-- Map Section -->
+            <div class="map-section">
+                <div id="map"></div>
+
+                <!-- Layer Selector -->
+                <div class="layer-selector">
+                    <label><i class="fas fa-layer-group"></i> Слой данных</label>
+                    <select id="weatherLayerSelect" onchange="MapModule.changeLayer()">
+                        <option value="risk">🎯 Интегральный риск</option>
+                        <option value="wind">💨 Ветер (по высотам)</option>
+                        <option value="precip">🌧️ Осадки</option>
+                        <option value="temp">🌡️ Температура</option>
+                        <option value="pressure">📊 Давление</option>
+                        <option value="humidity">💧 Влажность</option>
+                        <option value="turbulence">🌪️ Турбулентность</option>
+                    </select>
+                </div>
+
+                <!-- Geo Button -->
+                <button class="geo-btn" onclick="MapModule.getCurrentLocation()" title="Моё местоположение" style="top: 20px; right: 20px;">
+                    <i class="fas fa-location-crosshairs"></i>
+                </button>
+                
+                <!-- Кнопки управления слоями -->
+                <div style="position: absolute; bottom: 20px; right: 20px; z-index: 1000; display: flex; flex-direction: column; gap: 10px;">
+                    <button class="geo-btn" onclick="MapModule.changeLayer('risk')" title="Слой рисков" style="width: 44px; height: 44px;">
+                        <i class="fas fa-layer-group" style="color: #667eea;"></i>
+                    </button>
+                    <button class="geo-btn" onclick="ScoringSystem.getMeteoAndAnalyze()" title="Запустить анализ" style="width: 44px; height: 44px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+                        <i class="fas fa-rocket" style="color: white; font-size: 16px;"></i>
+                    </button>
+                    <button class="geo-btn" onclick="MapModule.addMarker(ScoringSystem.currentLocation.lon, ScoringSystem.currentLocation.lat)" title="Добавить маркер" style="width: 44px; height: 44px;">
+                        <i class="fas fa-map-marker-alt" style="color: #e53e3e;"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Charts Section -->
+            <div class="charts-section">
+                <div class="tabs">
+                    <div class="tab active" onclick="switchChartTab('timeseries')">Временной ряд</div>
+                    <div class="tab" onclick="switchChartTab('profile')">Профиль</div>
+                    <div class="tab" onclick="switchChartTab('recommendations')">Рекомендации</div>
+                </div>
+
+                <!-- Time Series Tab -->
+                <div id="chart-timeseries" class="tab-content active" style="grid-column: 1 / -1;">
+                    <div class="section-title">
+                        <i class="fas fa-chart-line"></i> Временной ряд метеопараметров
+                    </div>
+                    <div class="chart-container loading" id="timeSeriesChart"></div>
+                </div>
+
+                <!-- Profile Tab -->
+                <div id="chart-profile" class="tab-content" style="grid-column: 1 / -1;">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                        <div>
+                            <div class="section-title">
+                                <i class="fas fa-wind"></i> Вертикальный профиль ветра
+                            </div>
+                            <div class="chart-container loading" id="windProfileChart"></div>
+                        </div>
+                        <div>
+                            <div class="section-title">
+                                <i class="fas fa-thermometer-half"></i> Вертикальный профиль температуры
+                            </div>
+                            <div class="chart-container loading" id="tempProfileChart"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recommendations Tab -->
+                <div id="chart-recommendations" class="tab-content" style="grid-column: 1 / -1;">
+                    <div class="section-title">
+                        <i class="fas fa-clipboard-list"></i> Рекомендации для полёта
+                    </div>
+                    <div class="recommendations-list" id="recommendationsList">
+                        <div style="text-align: center; color: var(--text-muted); font-size: 13px; padding: 40px;">
+                            <i class="fas fa-info-circle" style="font-size: 24px; margin-bottom: 10px;"></i><br>
+                            Нажмите «Анализировать» для получения рекомендаций
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- ========== TOAST ========== -->
+    <div class="toast" id="toast">
+        <i class="fas fa-info-circle"></i>
+        <span id="toastMessage"></span>
+    </div>
+
+    <!-- ========== LOADING OVERLAY ========== -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div>
+            <div class="loading-spinner"></div>
+            <div class="loading-text" id="loadingText">Загрузка данных...</div>
+        </div>
+    </div>
+
+    <script>
+        // ========== UTILITY FUNCTIONS ==========
+        const Utils = {
+            log(message) {
+                console.log(`[MIRA] ${message}`);
+            },
+
+            formatTime(date) {
+                return date.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+            },
+
+            formatDate(date) {
+                return date.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' });
+            },
+
+            clamp(value, min, max) {
+                return Math.min(Math.max(value, min), max);
+            },
+
+            round(value, decimals = 1) {
+                return Math.round(value * Math.pow(10, decimals)) / Math.pow(10, decimals);
+            }
+        };
+
+        // ========== SHOW LOADING ==========
+        function showLoading(message = 'Загрузка данных...') {
+            document.getElementById('loadingText').textContent = message;
+            document.getElementById('loadingOverlay').classList.add('active');
+        }
+
+        function hideLoading() {
+            document.getElementById('loadingOverlay').classList.remove('active');
+        }
+
+        // ========== SHOW TOAST ==========
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            const toastMessage = document.getElementById('toastMessage');
+            const icon = toast.querySelector('i');
+
+            toastMessage.textContent = message;
+            toast.className = `toast ${type}`;
+
+            const icons = {
+                success: 'fa-check-circle',
+                error: 'fa-exclamation-circle',
+                warning: 'fa-exclamation-triangle',
+                info: 'fa-info-circle'
+            };
+
+            icon.className = `fas ${icons[type] || icons.info}`;
+            toast.classList.add('show');
+
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 3000);
+        }
+
+        // ========== UAV SCORING MODULE ==========
+        const UAVScoringModule = {
+            // Mission type multipliers for risk calculation
+            missionWeights: {
+                visual: { wind: 1.2, precip: 1.0, visibility: 1.3, temp: 1.0, icing: 1.0, turbulence: 1.1 },
+                cargo: { wind: 1.3, precip: 1.2, visibility: 1.1, temp: 1.0, icing: 1.2, turbulence: 1.2 },
+                emergency: { wind: 0.8, precip: 0.9, visibility: 0.8, temp: 0.9, icing: 0.8, turbulence: 0.8 },
+                agriculture: { wind: 1.1, precip: 1.3, visibility: 1.0, temp: 1.0, icing: 1.0, turbulence: 1.0 },
+                mapping: { wind: 1.2, precip: 1.1, visibility: 1.2, temp: 1.0, icing: 1.0, turbulence: 1.2 },
+                surveillance: { wind: 1.1, precip: 1.0, visibility: 1.2, temp: 1.0, icing: 1.0, turbulence: 1.1 }
+            },
+
+            // Calculate integral score (0-10 scale, lower is better)
+            calculateIntegralScore(weather, config, missionType) {
+                const weights = this.missionWeights[missionType] || this.missionWeights.visual;
+
+                const windRisk = this.calculateWindRisk(weather.wind10m, weather.wind500m, config.maxWind);
+                const precipRisk = this.calculatePrecipRisk(weather.precip, config.maxPrecip);
+                const visibilityRisk = this.calculateVisibilityRisk(weather.visibility, config.minVisibility);
+                const tempRisk = this.calculateTempRisk(weather.temp, config.tempMin, config.tempMax);
+                const icingRisk = this.calculateIcingRisk(weather.temp, weather.humidity, weather.precip);
+                const turbulenceRisk = this.calculateTurbulenceRisk(weather.wind10m, weather.wind500m, weather.temp);
+
+                // Apply mission weights
+                const weightedScore = (
+                    windRisk * weights.wind +
+                    precipRisk * weights.precip +
+                    visibilityRisk * weights.visibility +
+                    tempRisk * weights.temp +
+                    icingRisk * weights.icing +
+                    turbulenceRisk * weights.turbulence
+                ) / (weights.wind + weights.precip + weights.visibility + weights.temp + weights.icing + weights.turbulence);
+
+                return {
+                    total: Utils.round(weightedScore, 1),
+                    breakdown: {
+                        wind: Utils.round(windRisk, 1),
+                        precip: Utils.round(precipRisk, 1),
+                        visibility: Utils.round(visibilityRisk, 1),
+                        temp: Utils.round(tempRisk, 1),
+                        icing: Utils.round(icingRisk, 1),
+                        turbulence: Utils.round(turbulenceRisk, 1)
+                    }
+                };
+            },
+
+            calculateWindRisk(wind10m, wind500m, maxWind) {
+                const avgWind = (wind10m + wind500m) / 2;
+                const ratio = avgWind / maxWind;
+
+                if (ratio <= 0.5) return ratio * 2; // 0-1
+                if (ratio <= 0.8) return 1 + (ratio - 0.5) * 3; // 1-2
+                if (ratio <= 1.0) return 2 + (ratio - 0.8) * 5; // 2-3
+                return 3 + (ratio - 1.0) * 7; // 3+
+            },
+
+            calculatePrecipRisk(precip, maxPrecip) {
+                if (precip <= 0) return 0;
+                const ratio = precip / maxPrecip;
+
+                if (ratio <= 0.5) return ratio * 2;
+                if (ratio <= 1.0) return 1 + (ratio - 0.5) * 2;
+                return 2 + (ratio - 1.0) * 4;
+            },
+
+            calculateVisibilityRisk(visibility, minVisibility) {
+                if (visibility >= minVisibility * 2) return 0;
+                const ratio = visibility / minVisibility;
+
+                if (ratio >= 1) return (1 - ratio) * 2;
+                return 2 + (1 - ratio) * 4;
+            },
+
+            calculateTempRisk(temp, tempMin, tempMax) {
+                const range = tempMax - tempMin;
+                const optimalMin = tempMin + range * 0.3;
+                const optimalMax = tempMin + range * 0.7;
+
+                if (temp >= optimalMin && temp <= optimalMax) return 0;
+
+                if (temp < tempMin) {
+                    return Math.min(5, (tempMin - temp) / 5);
+                }
+                if (temp > tempMax) {
+                    return Math.min(5, (temp - tempMax) / 5);
+                }
+
+                return 0.5;
+            },
+
+            calculateIcingRisk(temp, humidity, precip) {
+                // Icing risk: temp between -10 and 0, high humidity, precipitation
+                if (temp > 5) return 0;
+                if (temp > 0 && humidity < 70) return 0;
+
+                let risk = 0;
+
+                // Temperature factor
+                if (temp >= -10 && temp <= 0) {
+                    risk += 2;
+                } else if (temp >= -20 && temp < -10) {
+                    risk += 1;
+                } else if (temp < -20) {
+                    risk += 0.5;
+                }
+
+                // Humidity factor
+                if (humidity >= 90) risk += 1.5;
+                else if (humidity >= 80) risk += 1;
+                else if (humidity >= 70) risk += 0.5;
+
+                // Precipitation factor
+                if (precip > 0) risk += 1;
+
+                return Math.min(5, risk);
+            },
+
+            calculateTurbulenceRisk(wind10m, wind500m, temp) {
+                const windShear = Math.abs(wind500m - wind10m);
+
+                let risk = 0;
+
+                // Wind shear factor
+                if (windShear > 15) risk += 2;
+                else if (windShear > 10) risk += 1.5;
+                else if (windShear > 5) risk += 1;
+
+                // Wind speed factor
+                if (wind10m > 10) risk += 1;
+                else if (wind10m > 7) risk += 0.5;
+
+                // Temperature instability (simplified)
+                if (temp > 30) risk += 0.5;
+
+                return Math.min(5, risk);
+            },
+
+            // Find flight windows in forecast data
+            findFlightWindows(forecast, config, missionType, minDuration = 30) {
+                const windows = [];
+                let currentWindow = null;
+
+                for (let i = 0; i < forecast.length; i++) {
+                    const hour = forecast[i];
+                    const score = this.calculateIntegralScore(hour, config, missionType);
+
+                    const isGood = score.total <= 3.0; // Threshold for "good" conditions
+
+                    if (isGood) {
+                        if (!currentWindow) {
+                            currentWindow = {
+                                start: hour.time,
+                                end: hour.time,
+                                scores: [score]
+                            };
+                        } else {
+                            currentWindow.end = hour.time;
+                            currentWindow.scores.push(score);
+                        }
+                    } else {
+                        if (currentWindow) {
+                            const duration = (new Date(currentWindow.end) - new Date(currentWindow.start)) / (1000 * 60);
+                            if (duration >= minDuration) {
+                                const avgScore = currentWindow.scores.reduce((a, b) => a + b.total, 0) / currentWindow.scores.length;
+                                windows.push({
+                                    start: currentWindow.start,
+                                    end: currentWindow.end,
+                                    duration: Math.round(duration),
+                                    avgScore: Utils.round(avgScore, 1)
+                                });
+                            }
+                            currentWindow = null;
+                        }
+                    }
+                }
+
+                // Handle window at end of forecast
+                if (currentWindow) {
+                    const duration = (new Date(currentWindow.end) - new Date(currentWindow.start)) / (1000 * 60);
+                    if (duration >= minDuration) {
+                        const avgScore = currentWindow.scores.reduce((a, b) => a + b.total, 0) / currentWindow.scores.length;
+                        windows.push({
+                            start: currentWindow.start,
+                            end: currentWindow.end,
+                            duration: Math.round(duration),
+                            avgScore: Utils.round(avgScore, 1)
+                        });
+                    }
+                }
+
+                return windows;
+            },
+
+            // Generate recommendations based on conditions
+            generateRecommendations(score, weather, config, missionType) {
+                const recommendations = [];
+                const breakdown = score.breakdown;
+
+                if (breakdown.wind > 2) {
+                    recommendations.push({
+                        type: 'warning',
+                        icon: 'fa-wind',
+                        text: `Высокий ветер (${Utils.round(weather.wind10m, 1)} м/с). Рекомендуется снизить высоту полёта или отложить миссию.`
+                    });
+                }
+
+                if (breakdown.precip > 1.5) {
+                    recommendations.push({
+                        type: 'warning',
+                        icon: 'fa-cloud-rain',
+                        text: `Осадки (${Utils.round(weather.precip, 1)} мм/ч). Убедитесь в влагозащите БПЛА или перенесите полёт.`
+                    });
+                }
+
+                if (breakdown.visibility > 2) {
+                    recommendations.push({
+                        type: 'warning',
+                        icon: 'fa-eye',
+                        text: `Низкая видимость (${Utils.round(weather.visibility, 1)} км). Используйте приборы навигации, увеличьте запас высоты.`
+                    });
+                }
+
+                if (breakdown.temp > 1.5) {
+                    if (weather.temp < config.tempMin) {
+                        recommendations.push({
+                            type: 'warning',
+                            icon: 'fa-thermometer',
+                            text: `Низкая температура (${Utils.round(weather.temp, 1)}°C). Прогрейте аккумуляторы, сократите время полёта.`
+                        });
+                    } else {
+                        recommendations.push({
+                            type: 'warning',
+                            icon: 'fa-thermometer',
+                            text: `Высокая температура (${Utils.round(weather.temp, 1)}°C). Контролируйте температуру двигателей и батарей.`
+                        });
+                    }
+                }
+
+                if (breakdown.icing > 1.5) {
+                    recommendations.push({
+                        type: 'danger',
+                        icon: 'fa-snowflake',
+                        text: `Риск обледенения. Температура ${Utils.round(weather.temp, 1)}°C, влажность ${Utils.round(weather.humidity, 0)}%. Крайне не рекомендуется.`
+                    });
+                }
+
+                if (breakdown.turbulence > 2) {
+                    recommendations.push({
+                        type: 'warning',
+                        icon: 'fa-wave-square',
+                        text: `Возможна турбулентность. Избегайте полётов near препятствий, увеличьте дистанцию.`
+                    });
+                }
+
+                if (recommendations.length === 0) {
+                    recommendations.push({
+                        type: 'success',
+                        icon: 'fa-check-circle',
+                        text: 'Условия благоприятны для полёта. Все параметры в пределах допустимых значений.'
+                    });
+                }
+
+                // Mission-specific recommendations
+                if (missionType === 'visual') {
+                    if (weather.wind10m > 5) {
+                        recommendations.push({
+                            type: 'info',
+                            icon: 'fa-video',
+                            text: 'Для визуального осмотра: при ветре >5 м/с возможна вибрация камеры.'
+                        });
+                    }
+                }
+
+                if (missionType === 'cargo') {
+                    recommendations.push({
+                        type: 'info',
+                        icon: 'fa-box',
+                        text: 'Для доставки грузов: учтите увеличенный расход энергии при встречном ветре.'
+                    });
+                }
+
+                if (missionType === 'agriculture') {
+                    if (weather.wind10m > 3) {
+                        recommendations.push({
+                            type: 'info',
+                            icon: 'fa-tractor',
+                            text: 'Для сельхозработ: ветер >3 м/с может вызвать снос распыляемых веществ.'
+                        });
+                    }
+                }
+
+                return recommendations;
+            }
+        };
+
+        // ========== WEATHER MODULE ==========
+        const WeatherModule = {
+            baseUrl: 'https://api.open-meteo.com/v1/forecast',
+
+            async getCurrentWeather(lat, lon) {
+                const params = new URLSearchParams({
+                    latitude: lat,
+                    longitude: lon,
+                    current: 'temperature_2m,relative_humidity_2m,precipitation,weather_code,surface_pressure,wind_speed_10m,wind_direction_10m,visibility',
+                    hourly: 'temperature_2m,relative_humidity_2m,precipitation,weather_code,surface_pressure,wind_speed_10m,wind_direction_10m,wind_speed_500m,wind_direction_500m,visibility',
+                    timezone: 'auto',
+                    forecast_days: 3
+                });
+
+                const response = await fetch(`${this.baseUrl}?${params}`);
+                if (!response.ok) throw new Error('Failed to fetch weather data');
+
+                const data = await response.json();
+                return this.parseWeatherData(data);
+            },
+
+            parseWeatherData(data) {
+                const current = data.current;
+                const hourly = data.hourly;
+
+                // Parse hourly forecast
+                const forecast = [];
+                for (let i = 0; i < Math.min(72, hourly.time.length); i++) {
+                    forecast.push({
+                        time: hourly.time[i],
+                        temp: hourly.temperature_2m[i],
+                        humidity: hourly.relative_humidity_2m[i],
+                        precip: hourly.precipitation[i],
+                        weatherCode: hourly.weather_code[i],
+                        pressure: hourly.surface_pressure[i],
+                        wind10m: hourly.wind_speed_10m[i],
+                        windDir10m: hourly.wind_direction_10m[i],
+                        wind500m: hourly.wind_speed_500m ? hourly.wind_speed_500m[i] : hourly.wind_speed_10m[i] * 1.5,
+                        windDir500m: hourly.wind_direction_500m ? hourly.wind_direction_500m[i] : hourly.wind_direction_10m[i],
+                        visibility: hourly.visibility ? hourly.visibility[i] / 1000 : 10 // Convert m to km
+                    });
+                }
+
+                return {
+                    current: {
+                        temp: current.temperature_2m,
+                        humidity: current.relative_humidity_2m,
+                        precip: current.precipitation,
+                        weatherCode: current.weather_code,
+                        pressure: current.surface_pressure,
+                        wind10m: current.wind_speed_10m,
+                        windDir10m: current.wind_direction_10m,
+                        wind500m: current.wind_speed_10m * 1.5,
+                        visibility: current.visibility ? current.visibility / 1000 : 10
+                    },
+                    forecast: forecast
+                };
+            }
+        };
+
+        // ========== MAP MODULE ==========
+        const MapModule = {
+            map: null,
+            markerLayer: null,
+            heatmapLayer: null,
+            currentLayer: 'risk',
+
+            init() {
+                // Marker layer
+                this.markerLayer = new ol.layer.Vector({
+                    source: new ol.source.Vector()
+                });
+
+                // Base map layer
+                const baseLayer = new ol.layer.Tile({
+                    source: new ol.source.OSM()
+                });
+
+                // Initialize map
+                this.map = new ol.Map({
+                    target: 'map',
+                    layers: [baseLayer, this.markerLayer],
+                    view: new ol.View({
+                        center: ol.proj.fromLonLat([37.6173, 55.7558]), // Moscow
+                        zoom: 10
+                    })
+                });
+
+                // Add click handler
+                this.map.on('click', (e) => {
+                    const coords = ol.proj.toLonLat(e.coordinate);
+                    ScoringSystem.onMapClick(coords[0], coords[1]);
+                });
+            },
+
+            setCenter(lon, lat, zoom = 12) {
+                this.map.getView().setCenter(ol.proj.fromLonLat([lon, lat]));
+                this.map.getView().setZoom(zoom);
+            },
+
+            addMarker(lon, lat, title = '') {
+                const feature = new ol.Feature({
+                    geometry: new ol.geom.Point(ol.proj.fromLonLat([lon, lat]))
+                });
+
+                const marker = new ol.style.Style({
+                    image: new ol.style.Icon({
+                        src: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="%23667eea"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>',
+                        anchor: [0.5, 1],
+                        anchorXUnits: 'fraction',
+                        anchorYUnits: 'fraction',
+                        scale: 1.2
+                    })
+                });
+
+                feature.setStyle(marker);
+                this.markerLayer.getSource().clear();
+                this.markerLayer.getSource().addFeature(feature);
+            },
+
+            getCurrentLocation() {
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => {
+                            const { latitude, longitude } = position.coords;
+                            this.setCenter(longitude, latitude);
+                            this.addMarker(longitude, latitude, 'Ваше местоположение');
+                            ScoringSystem.updateCoords(latitude, longitude);
+                            showToast('Местоположение определено', 'success');
+                        },
+                        (error) => {
+                            showToast('Не удалось определить местоположение', 'error');
+                        }
+                    );
+                } else {
+                    showToast('Геолокация не поддерживается', 'error');
+                }
+            },
+
+            changeLayer() {
+                const select = document.getElementById('weatherLayerSelect');
+                this.currentLayer = select.value;
+                Utils.log(`Layer changed: ${this.currentLayer}`);
+                showToast(`Слой: ${select.options[select.selectedIndex].text}`, 'info');
+            }
+        };
+
+        // ========== SCORING SYSTEM (MAIN ORCHESTRATOR) ==========
+        const ScoringSystem = {
+            config: {
+                uavType: 'multirotor',
+                uavCategory: 'light',
+                maxWind: 10,
+                maxPrecip: 1,
+                minVisibility: 2,
+                tempMin: -10,
+                tempMax: 35,
+                missionType: 'visual',
+                workAltitude: 100,
+                missionRange: 5,
+                missionDuration: 30
+            },
+
+            currentWeather: null,
+            currentLocation: { lat: 55.7558, lon: 37.6173 }, // Moscow default
+
+            init() {
+                MapModule.init();
+                this.loadConfig();
+                this.updateConfigUI();
+                Utils.log('Scoring System initialized');
+            },
+
+            updateCoords(lat, lon) {
+                this.currentLocation = { lat, lon };
+                document.getElementById('latInput')?.value || this.updateCoordDisplay(lat, lon);
+            },
+
+            updateCoordDisplay(lat, lon) {
+                // Update any coord display elements
+                const latDisplay = document.getElementById('currentLat');
+                const lonDisplay = document.getElementById('currentLon');
+                if (latDisplay) latDisplay.textContent = Utils.round(lat, 4);
+                if (lonDisplay) lonDisplay.textContent = Utils.round(lon, 4);
+            },
+
+            onMapClick(lon, lat) {
+                this.currentLocation = { lat, lon };
+                MapModule.addMarker(lon, lat);
+                MapModule.setCenter(lon, lat);
+                this.updateCoordDisplay(lat, lon);
+                Utils.log(`Map clicked: ${lat}, ${lon}`);
+            },
+
+            updateConfigUI() {
+                document.getElementById('uavType').value = this.config.uavType;
+                document.getElementById('uavCategory').value = this.config.uavCategory;
+                document.getElementById('maxWind').value = this.config.maxWind;
+                document.getElementById('maxPrecip').value = this.config.maxPrecip;
+                document.getElementById('minVisibility').value = this.config.minVisibility;
+                document.getElementById('tempMin').value = this.config.tempMin;
+                document.getElementById('tempMax').value = this.config.tempMax;
+                document.getElementById('missionType').value = this.config.missionType;
+                document.getElementById('workAltitude').value = this.config.workAltitude;
+                document.getElementById('missionRange').value = this.config.missionRange;
+                document.getElementById('missionDuration').value = this.config.missionDuration;
+            },
+
+            readConfigUI() {
+                this.config.uavType = document.getElementById('uavType').value;
+                this.config.uavCategory = document.getElementById('uavCategory').value;
+                this.config.maxWind = parseFloat(document.getElementById('maxWind').value);
+                this.config.maxPrecip = parseFloat(document.getElementById('maxPrecip').value);
+                this.config.minVisibility = parseFloat(document.getElementById('minVisibility').value);
+                this.config.tempMin = parseFloat(document.getElementById('tempMin').value);
+                this.config.tempMax = parseFloat(document.getElementById('tempMax').value);
+                this.config.missionType = document.getElementById('missionType').value;
+                this.config.workAltitude = parseFloat(document.getElementById('workAltitude').value);
+                this.config.missionRange = parseFloat(document.getElementById('missionRange').value);
+                this.config.missionDuration = parseFloat(document.getElementById('missionDuration').value);
+            },
+
+            onUavTypeChange() {
+                this.readConfigUI();
+                Utils.log(`UAV type changed: ${this.config.uavType}`);
+            },
+
+            onMissionTypeChange() {
+                this.readConfigUI();
+                Utils.log(`Mission type changed: ${this.config.missionType}`);
+            },
+
+            async getMeteoAndAnalyze() {
+                this.readConfigUI();
+                showLoading('🚀 Получение метео и анализ...');
+                
+                try {
+                    const weatherData = await WeatherModule.getCurrentWeather(
+                        this.currentLocation.lat,
+                        this.currentLocation.lon
+                    );
+
+                    this.currentWeather = weatherData;
+                    this.updateCurrentConditions(weatherData.current);
+                    this.calculateAndDisplayScore(weatherData.current);
+                    this.renderTimeSeriesChart(weatherData.forecast);
+                    this.renderWindProfileChart(weatherData.forecast);
+                    this.renderTempProfileChart(weatherData.forecast);
+                    this.findAndDisplayWindows(weatherData.forecast);
+                    this.generateAndDisplayRecommendations(weatherData.current);
+                    
+                    MapModule.addMarker(this.currentLocation.lon, this.currentLocation.lat);
+                    
+                    hideLoading();
+                    showToast('✅ Анализ завершён!', 'success');
+                } catch (error) {
+                    hideLoading();
+                    showToast(`❌ Ошибка: ${error.message}`, 'error');
+                    Utils.log(`GetMeteoAndAnalyze error: ${error.message}`);
+                }
+            },
+
+            async analyze() {
+                this.readConfigUI();
+                showLoading('Загрузка метеоданных...');
+
+                try {
+                    const weatherData = await WeatherModule.getCurrentWeather(
+                        this.currentLocation.lat,
+                        this.currentLocation.lon
+                    );
+
+                    this.currentWeather = weatherData;
+                    this.updateCurrentConditions(weatherData.current);
+                    this.calculateAndDisplayScore(weatherData.current);
+                    this.renderTimeSeriesChart(weatherData.forecast);
+                    this.renderWindProfileChart(weatherData.forecast);
+                    this.renderTempProfileChart(weatherData.forecast);
+                    this.findAndDisplayWindows(weatherData.forecast);
+                    this.generateAndDisplayRecommendations(weatherData.current);
+
+                    MapModule.addMarker(this.currentLocation.lon, this.currentLocation.lat);
+                    hideLoading();
+                    showToast('Анализ завершён', 'success');
+                } catch (error) {
+                    hideLoading();
+                    showToast(`Ошибка: ${error.message}`, 'error');
+                    Utils.log(`Analysis error: ${error.message}`);
+                }
+            },
+
+            updateCurrentConditions(current) {
+                document.getElementById('curWind').textContent = Utils.round(current.wind10m, 1);
+                document.getElementById('curWind500').textContent = Utils.round(current.wind500m, 1);
+                document.getElementById('curVisibility').textContent = Utils.round(current.visibility, 1);
+                document.getElementById('curTemp').textContent = (current.temp >= 0 ? '+' : '') + Utils.round(current.temp, 1);
+                document.getElementById('curPrecip').textContent = Utils.round(current.precip, 1);
+
+                // Calculate icing risk display
+                const icingRisk = UAVScoringModule.calculateIcingRisk(current.temp, current.humidity, current.precip);
+                const icingText = icingRisk < 1 ? 'НИЗ' : icingRisk < 2 ? 'СРЕД' : icingRisk < 3 ? 'ВЫС' : 'ЭКСТР';
+                document.getElementById('curIcing').textContent = icingText;
+
+                // Update badges
+                this.updateBadge('badgeWind', current.wind10m, this.config.maxWind);
+                this.updateBadge('badgeWind500', current.wind500m, this.config.maxWind * 1.5);
+                this.updateBadge('badgeVisibility', current.visibility, this.config.minVisibility, true);
+                this.updateBadge('badgeTemp', current.temp, this.config.tempMax, false, this.config.tempMin);
+                this.updateBadge('badgePrecip', current.precip, this.config.maxPrecip);
+                this.updateBadge('badgeIcing', icingRisk, 2);
+            },
+
+            updateBadge(id, value, max, higherIsBetter = false, min = null) {
+                const badge = document.getElementById(id);
+                let className = 'badge-ok';
+                let text = 'OK';
+
+                if (higherIsBetter) {
+                    if (value < max * 0.5) { className = 'badge-danger'; text = 'BAD'; }
+                    else if (value < max) { className = 'badge-warn'; text = 'WARN'; }
+                } else {
+                    if (min !== null && value < min) { className = 'badge-danger'; text = 'BAD'; }
+                    else if (value > max) { className = 'badge-danger'; text = 'BAD'; }
+                    else if (value > max * 0.8) { className = 'badge-warn'; text = 'WARN'; }
+                }
+
+                badge.className = `badge ${className}`;
+                badge.textContent = text;
+            },
+
+            calculateAndDisplayScore(weather) {
+                const score = UAVScoringModule.calculateIntegralScore(
+                    weather,
+                    this.config,
+                    this.config.missionType
+                );
+
+                // Update score circle
+                const scorePercent = (score.total / 10) * 100;
+                const scoreColor = score.total <= 3 ? '#38a169' : score.total <= 5 ? '#ed8936' : '#e53e3e';
+                const scoreCircle = document.getElementById('scoreCircle');
+                scoreCircle.style.setProperty('--score-color', scoreColor);
+                scoreCircle.style.setProperty('--score-percent', `${scorePercent}%`);
+
+                document.getElementById('scoreNumber').textContent = score.total;
+
+                // Update status
+                const statusEl = document.getElementById('scoreStatus');
+                if (score.total <= 3) {
+                    statusEl.className = 'score-status allowed';
+                    statusEl.innerHTML = '<i class="fas fa-check-circle"></i><span>ПОЛЁТ РАЗРЕШЁН</span>';
+                } else if (score.total <= 5) {
+                    statusEl.className = 'score-status restricted';
+                    statusEl.innerHTML = '<i class="fas fa-exclamation-triangle"></i><span>ОГРАНИЧЕНИЯ</span>';
+                } else {
+                    statusEl.className = 'score-status forbidden';
+                    statusEl.innerHTML = '<i class="fas fa-times-circle"></i><span>ПОЛЁТ ЗАПРЕЩЁН</span>';
+                }
+
+                // Update risk breakdown
+                this.updateRiskBar('riskWindBar', 'riskWindValue', score.breakdown.wind);
+                this.updateRiskBar('riskPrecipBar', 'riskPrecipValue', score.breakdown.precip);
+                this.updateRiskBar('riskVisBar', 'riskVisValue', score.breakdown.visibility);
+                this.updateRiskBar('riskTempBar', 'riskTempValue', score.breakdown.temp);
+                this.updateRiskBar('riskIcingBar', 'riskIcingValue', score.breakdown.icing);
+                this.updateRiskBar('riskTurbBar', 'riskTurbValue', score.breakdown.turbulence);
+            },
+
+            updateRiskBar(barId, valueId, risk) {
+                const bar = document.getElementById(barId);
+                const value = document.getElementById(valueId);
+
+                bar.style.width = `${Math.min(100, risk * 20)}%`;
+                bar.className = `fill ${risk < 2 ? 'low' : risk < 3.5 ? 'medium' : 'high'}`;
+                value.textContent = risk;
+            },
+
+            findAndDisplayWindows(forecast) {
+                const windows = UAVScoringModule.findFlightWindows(
+                    forecast,
+                    this.config,
+                    this.config.missionType
+                );
+
+                const container = document.getElementById('flightWindows');
+
+                if (windows.length === 0) {
+                    container.innerHTML = `
+                        <div style="text-align: center; color: var(--text-muted); font-size: 13px; padding: 20px;">
+                            <i class="fas fa-times-circle"></i><br>
+                            Благоприятных окон не найдено
+                        </div>
+                    `;
+                    return;
+                }
+
+                container.innerHTML = windows.map(w => `
+                    <div class="flight-window">
+                        <div>
+                            <i class="fas fa-check-circle"></i>
+                            <span class="time">${Utils.formatTime(new Date(w.start))} - ${Utils.formatTime(new Date(w.end))}</span>
+                        </div>
+                        <div class="duration">${w.duration} мин | Оценка: ${w.avgScore}</div>
+                    </div>
+                `).join('');
+            },
+
+            generateAndDisplayRecommendations(weather) {
+                const score = UAVScoringModule.calculateIntegralScore(
+                    weather,
+                    this.config,
+                    this.config.missionType
+                );
+
+                const recommendations = UAVScoringModule.generateRecommendations(
+                    score,
+                    weather,
+                    this.config,
+                    this.config.missionType
+                );
+
+                const container = document.getElementById('recommendationsList');
+                container.innerHTML = recommendations.map(r => `
+                    <div class="recommendation-item">
+                        <i class="fas ${r.icon}"></i>
+                        <span>${r.text}</span>
+                    </div>
+                `).join('');
+            },
+
+            renderTimeSeriesChart(forecast) {
+                const container = document.getElementById('timeSeriesChart');
+                container.classList.remove('loading');
+
+                const times = forecast.map(h => Utils.formatTime(new Date(h.time)));
+                const temps = forecast.map(h => h.temp);
+                const winds = forecast.map(h => h.wind10m);
+                const precip = forecast.map(h => h.precip);
+
+                Plotly.newPlot(container, [
+                    {
+                        x: times,
+                        y: temps,
+                        type: 'scatter',
+                        mode: 'lines',
+                        name: 'Температура (°C)',
+                        line: { color: '#e53e3e', width: 2 },
+                        yaxis: 'y'
+                    },
+                    {
+                        x: times,
+                        y: winds,
+                        type: 'scatter',
+                        mode: 'lines',
+                        name: 'Ветер 10м (м/с)',
+                        line: { color: '#4fc3f7', width: 2 },
+                        yaxis: 'y2'
+                    },
+                    {
+                        x: times,
+                        y: precip,
+                        type: 'bar',
+                        name: 'Осадки (мм)',
+                        marker: { color: 'rgba(102, 126, 234, 0.6)' },
+                        yaxis: 'y2'
+                    }
+                ], {
+                    showlegend: true,
+                    legend: { orientation: 'h', y: -0.2 },
+                    margin: { t: 20, l: 50, r: 50, b: 40 },
+                    yaxis: { title: 'Температура (°C)', side: 'left' },
+                    yaxis2: { title: 'Ветер/Осадки', overlaying: 'y', side: 'right' },
+                    paper_bgcolor: 'rgba(0,0,0,0)',
+                    plot_bgcolor: 'rgba(0,0,0,0)',
+                    font: { family: 'system-ui', size: 11 }
+                }, { responsive: true, displayModeBar: false });
+            },
+
+            renderWindProfileChart(forecast) {
+                const container = document.getElementById('windProfileChart');
+                container.classList.remove('loading');
+
+                const current = forecast[0];
+                const altitudes = [0, 100, 200, 300, 400, 500];
+                const windSpeeds = altitudes.map(h => {
+                    if (h === 0) return current.wind10m;
+                    if (h >= 500) return current.wind500m;
+                    // Interpolate
+                    const ratio = h / 500;
+                    return current.wind10m + (current.wind500m - current.wind10m) * ratio;
+                });
+
+                Plotly.newPlot(container, [{
+                    x: windSpeeds,
+                    y: altitudes,
+                    type: 'scatter',
+                    mode: 'lines+markers',
+                    name: 'Ветер',
+                    line: { color: '#4fc3f7', width: 3 },
+                    marker: { size: 8 }
+                }], {
+                    margin: { t: 20, l: 50, r: 20, b: 40 },
+                    xaxis: { title: 'Ветер (м/с)' },
+                    yaxis: { title: 'Высота (м)' },
+                    paper_bgcolor: 'rgba(0,0,0,0)',
+                    plot_bgcolor: 'rgba(0,0,0,0)',
+                    font: { family: 'system-ui', size: 11 }
+                }, { responsive: true, displayModeBar: false });
+            },
+
+            renderTempProfileChart(forecast) {
+                const container = document.getElementById('tempProfileChart');
+                container.classList.remove('loading');
+
+                const current = forecast[0];
+                const altitudes = [0, 100, 200, 300, 400, 500];
+                // Standard lapse rate: ~6.5°C per 1000m
+                const temps = altitudes.map(h => current.temp - (h / 1000) * 6.5);
+
+                Plotly.newPlot(container, [{
+                    x: temps,
+                    y: altitudes,
+                    type: 'scatter',
+                    mode: 'lines+markers',
+                    name: 'Температура',
+                    line: { color: '#e53e3e', width: 3 },
+                    marker: { size: 8 }
+                }], {
+                    margin: { t: 20, l: 50, r: 20, b: 40 },
+                    xaxis: { title: 'Температура (°C)' },
+                    yaxis: { title: 'Высота (м)' },
+                    paper_bgcolor: 'rgba(0,0,0,0)',
+                    plot_bgcolor: 'rgba(0,0,0,0)',
+                    font: { family: 'system-ui', size: 11 }
+                }, { responsive: true, displayModeBar: false });
+            },
+
+            saveConfig() {
+                this.readConfigUI();
+                localStorage.setItem('miraScoringConfig', JSON.stringify(this.config));
+                localStorage.setItem('miraScoringLocation', JSON.stringify(this.currentLocation));
+                showToast('Конфигурация сохранена', 'success');
+            },
+
+            loadConfig() {
+                const savedConfig = localStorage.getItem('miraScoringConfig');
+                const savedLocation = localStorage.getItem('miraScoringLocation');
+
+                if (savedConfig) {
+                    this.config = { ...this.config, ...JSON.parse(savedConfig) };
+                    this.updateConfigUI();
+                }
+
+                if (savedLocation) {
+                    this.currentLocation = JSON.parse(savedLocation);
+                    MapModule.setCenter(this.currentLocation.lon, this.currentLocation.lat);
+                    MapModule.addMarker(this.currentLocation.lon, this.currentLocation.lat);
+                    this.updateCoordDisplay(this.currentLocation.lat, this.currentLocation.lon);
+                }
+
+                if (savedConfig || savedLocation) {
+                    showToast('Конфигурация загружена', 'success');
+                }
+            },
+
+            exportPDF() {
+                if (!this.currentWeather) {
+                    showToast('Сначала выполните анализ', 'warning');
+                    return;
+                }
+
+                const score = UAVScoringModule.calculateIntegralScore(
+                    this.currentWeather.current,
+                    this.config,
+                    this.config.missionType
+                );
+
+                const docDefinition = {
+                    content: [
+                        { text: 'MIRA - UAV Meteorological Scoring Report', style: 'header' },
+                        { text: `Generated: ${new Date().toLocaleString('ru-RU')}`, style: 'subheader' },
+                        { text: '\n' },
+                        { text: 'Configuration', style: 'subheader' },
+                        {
+                            ul: [
+                                `UAV Type: ${this.config.uavType}`,
+                                `Category: ${this.config.uavCategory}`,
+                                `Mission: ${this.config.missionType}`,
+                                `Max Wind: ${this.config.maxWind} m/s`,
+                                `Work Altitude: ${this.config.workAltitude} m`
+                            ]
+                        },
+                        { text: '\n' },
+                        { text: 'Current Conditions', style: 'subheader' },
+                        {
+                            ul: [
+                                `Temperature: ${this.currentWeather.current.temp}°C`,
+                                `Wind (10m): ${this.currentWeather.current.wind10m} m/s`,
+                                `Wind (500m): ${this.currentWeather.current.wind500m} m/s`,
+                                `Visibility: ${this.currentWeather.current.visibility} km`,
+                                `Precipitation: ${this.currentWeather.current.precip} mm/h`,
+                                `Humidity: ${this.currentWeather.current.humidity}%`
+                            ]
+                        },
+                        { text: '\n' },
+                        { text: 'Risk Assessment', style: 'subheader' },
+                        { text: `Integral Score: ${score.total}/10`, style: 'score' },
+                        {
+                            ul: [
+                                `Wind Risk: ${score.breakdown.wind}`,
+                                `Precipitation Risk: ${score.breakdown.precip}`,
+                                `Visibility Risk: ${score.breakdown.visibility}`,
+                                `Temperature Risk: ${score.breakdown.temp}`,
+                                `Icing Risk: ${score.breakdown.icing}`,
+                                `Turbulence Risk: ${score.breakdown.turbulence}`
+                            ]
+                        }
+                    ],
+                    styles: {
+                        header: { fontSize: 18, bold: true, margin: [0, 0, 0, 10] },
+                        subheader: { fontSize: 14, bold: true, margin: [0, 10, 0, 5] },
+                        score: { fontSize: 16, bold: true, color: score.total <= 3 ? '#276749' : score.total <= 5 ? '#c05621' : '#c53030' }
+                    }
+                };
+
+                pdfMake.createPdf(docDefinition).download(`MIRA_Score_Report_${Date.now()}.pdf`);
+                showToast('PDF экспортирован', 'success');
+            }
+        };
+
+        // ========== CHART TAB SWITCHING ==========
+        function switchChartTab(tabName) {
+            // Update tab buttons
+            document.querySelectorAll('.charts-section .tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            // Update content
+            document.querySelectorAll('.charts-section .tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(`chart-${tabName}`).classList.add('active');
+        }
+
+        // ========== INITIALIZATION ==========
+        document.addEventListener('DOMContentLoaded', () => {
+            ScoringSystem.init();
+        });
+    </script>
+</body>
+</html>

@@ -2,14 +2,9 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="theme-color" content="#1a1a2e">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <meta http-equiv="Pragma" content="no-cache">
-    <meta http-equiv="Expires" content="0">
-    <title>MIRA - Метеоанализ полётов</title>
+    <title>MIRA - Desktop</title>
 
     <!-- OpenLayers -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@v9.2.4/ol.css">
@@ -26,37 +21,695 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.66/vfs_fonts.js"></script>
 
     <!-- Стили -->
-    <link rel="stylesheet" href="css/common.css">
-    <link rel="stylesheet" href="css/mobile.css">
+    <link rel="stylesheet" href="https://kkav45.github.io/mira0143/css/common.css">
+    <link rel="stylesheet" href="https://kkav45.github.io/mira0143/css/desktop.css">
+    <link rel="stylesheet" href="css/dashboard-modal.css?v=2026030317">
 
-    <!-- ML Accuracy Module -->
-    <script src="js/ml-accuracy.js"></script>
+    <style>
+        /* Основной контейнер */
+        .desktop-container {
+            display: flex;
+            width: 100%;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        /* Карта - 60% */
+        .map-container {
+            flex: 0 0 60%;
+            position: relative;
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Правая панель - 40% */
+        .side-panel {
+            flex: 0 0 40%;
+            background: #f7fafc;
+            border-left: 1px solid #e2e8f0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Шапка панели */
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .panel-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        .panel-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .panel-btn {
+            width: 36px;
+            height: 36px;
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .panel-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        /* Контент панели */
+        .panel-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        /* Кнопка геолокации на карте */
+        .geo-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 48px;
+            height: 48px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: none;
+            border-radius: 14px;
+            color: #2d3748;
+            font-size: 18px;
+            cursor: pointer;
+            z-index: 1000;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .geo-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 25px rgba(0, 0, 0, 0.2);
+        }
+
+        .geo-btn i {
+            color: #667eea;
+        }
+
+        /* Секции в панели */
+        .panel-section {
+            background: white;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+
+        .panel-section-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .panel-section-title i {
+            color: #667eea;
+        }
+
+        /* Кнопка действия */
+        .action-btn {
+            width: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 12px;
+            padding: 14px;
+            color: #fff;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            transition: all 0.3s;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .action-btn:active {
+            transform: scale(0.98);
+        }
+
+        .action-btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .action-btn.secondary {
+            background: rgba(0, 0, 0, 0.05);
+            color: #4a5568;
+            box-shadow: none;
+        }
+
+        .action-btn.secondary:hover {
+            background: rgba(0, 0, 0, 0.1);
+        }
+
+        /* Поля ввода */
+        .input-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .input-row input {
+            flex: 1;
+            padding: 10px 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.2s;
+        }
+
+        .input-row input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        /* Уведомления */
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #2d3748;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            display: none;
+            align-items: center;
+            gap: 10px;
+            z-index: 10000;
+            animation: slideUp 0.3s ease;
+        }
+
+        .toast.active {
+            display: flex;
+        }
+
+        .toast.success { background: #38a169; }
+        .toast.error { background: #e53e3e; }
+        .toast.info { background: #3182ce; }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateX(-50%) translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(-50%) translateY(0);
+            }
+        }
+
+        /* Модальное окно СКОРИНГА */
+        .scoring-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(5px);
+            z-index: 10001;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+
+        .scoring-modal.active {
+            display: flex;
+            opacity: 1;
+        }
+
+        .scoring-modal-content {
+            max-width: 500px;
+            width: 90%;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+            transform: scale(0.9);
+            transition: transform 0.3s ease;
+        }
+
+        .scoring-modal.active .scoring-modal-content {
+            transform: scale(1);
+        }
+
+        .scoring-modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 24px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .scoring-modal-header h3 {
+            margin: 0;
+            font-size: 18px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .scoring-close-btn {
+            width: 36px;
+            height: 36px;
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 18px;
+            cursor: pointer;
+            transition: background 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .scoring-close-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .scoring-modal-body {
+            padding: 24px;
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+
+        /* Основной индикатор */
+        .scoring-main-indicator {
+            text-align: center;
+            padding: 20px 0;
+            border-bottom: 2px solid #f0f0f0;
+            margin-bottom: 20px;
+        }
+
+        .score-circle-wrapper {
+            display: inline-block;
+            margin-bottom: 16px;
+        }
+
+        .score-circle {
+            width: 140px;
+            height: 140px;
+            border-radius: 50%;
+            background: conic-gradient(#38a169 0deg, rgba(0, 0, 0, 0.1) 0deg);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto;
+            transition: background 0.5s ease;
+        }
+
+        .score-circle-inner {
+            width: 110px;
+            height: 110px;
+            background: white;
+            border-radius: 50%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .score-value {
+            font-size: 32px;
+            font-weight: 700;
+            color: #2d3748;
+            line-height: 1;
+        }
+
+        .score-max {
+            font-size: 12px;
+            color: #718096;
+            margin-top: 4px;
+        }
+
+        .score-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            margin-top: 16px;
+        }
+
+        .score-status-allowed {
+            background: rgba(56, 161, 105, 0.1);
+            color: #38a169;
+        }
+
+        .score-status-warning {
+            background: rgba(237, 137, 54, 0.1);
+            color: #ed8936;
+        }
+
+        .score-status-denied {
+            background: rgba(229, 62, 62, 0.1);
+            color: #e53e3e;
+        }
+
+        .score-status-icon {
+            font-size: 20px;
+        }
+
+        /* Детализация по факторам */
+        .scoring-breakdown {
+            margin-bottom: 20px;
+        }
+
+        .scoring-breakdown-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .scoring-factor {
+            margin-bottom: 14px;
+        }
+
+        .scoring-factor-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 6px;
+        }
+
+        .scoring-factor-icon {
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(102, 126, 234, 0.1);
+            border-radius: 6px;
+            color: #667eea;
+            font-size: 12px;
+        }
+
+        .scoring-factor-name {
+            flex: 1;
+            font-size: 13px;
+            font-weight: 500;
+            color: #4a5568;
+        }
+
+        .scoring-factor-value {
+            font-size: 13px;
+            font-weight: 600;
+            color: #2d3748;
+            min-width: 28px;
+            text-align: right;
+        }
+
+        .scoring-factor-bar {
+            height: 8px;
+            background: #e2e8f0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-left: 34px;
+        }
+
+        .scoring-factor-fill {
+            height: 100%;
+            background: #38a169;
+            border-radius: 4px;
+            transition: width 0.5s ease, background 0.3s ease;
+        }
+
+        /* Рекомендации */
+        .scoring-recommendations {
+            margin-bottom: 20px;
+        }
+
+        .scoring-recommendations-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #2d3748;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .scoring-rec {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 12px;
+            border-radius: 10px;
+            margin-bottom: 8px;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .scoring-rec-success {
+            background: rgba(56, 161, 105, 0.1);
+            color: #276749;
+        }
+
+        .scoring-rec-warning {
+            background: rgba(237, 137, 54, 0.1);
+            color: #9c4221;
+        }
+
+        .scoring-rec-danger {
+            background: rgba(229, 62, 62, 0.1);
+            color: #c53030;
+        }
+
+        .scoring-rec-info {
+            background: rgba(49, 130, 206, 0.1);
+            color: #2c5282;
+        }
+
+        .scoring-rec-icon {
+            font-size: 14px;
+            margin-top: 2px;
+            flex-shrink: 0;
+        }
+
+        .scoring-rec-text {
+            flex: 1;
+        }
+
+        /* Кнопки */
+        .scoring-modal-footer {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding-top: 20px;
+            border-top: 2px solid #f0f0f0;
+        }
+
+        .scoring-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 14px 20px;
+            border: none;
+            border-radius: 12px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .scoring-btn-dashboard {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .scoring-btn-dashboard:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .scoring-btn-dashboard:active {
+            transform: translateY(0);
+        }
+
+        .scoring-btn-secondary {
+            background: rgba(0, 0, 0, 0.05);
+            color: #4a5568;
+        }
+
+        .scoring-btn-secondary:hover {
+            background: rgba(0, 0, 0, 0.1);
+        }
+    </style>
 </head>
 <body>
-    <!-- Карта -->
-    <div id="map"></div>
+    <div class="desktop-container">
+        <!-- Карта -->
+        <div class="map-container">
+            <div id="map"></div>
 
-    <!-- Кнопка геолокации -->
-    <button class="geo-btn" onclick="getCurrentLocation()" title="Моё местоположение">
-        <i class="fas fa-location-crosshairs"></i>
-    </button>
-
-    <!-- Переключатель слоёв -->
-    <div id="layerSelector" style="position: fixed; top: 20px; left: 20px; z-index: 2000; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); padding: 12px 16px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2); display: none;">
-        <div style="font-size: 11px; font-weight: 600; color: #2d3748; margin-bottom: 8px;">
-            <i class="fas fa-layer-group"></i> Слой данных
+            <!-- Кнопка геолокации -->
+            <button class="geo-btn" onclick="getCurrentLocation()" title="Моё местоположение">
+                <i class="fas fa-location-crosshairs"></i>
+            </button>
         </div>
-        <select id="weatherLayerSelect" onchange="changeWeatherLayer()" style="width: 100%; padding: 6px 10px; border-radius: 6px; border: 1px solid rgba(0,0,0,0.15); background: rgba(255,255,255,0.9); font-size: 11px; color: #2d3748; cursor: pointer; min-width: 180px;">
-            <option value="risk">🎯 Интегральный риск</option>
-            <option value="wind">💨 Ветер (по высотам)</option>
-            <option value="precip">🌧️ Осадки</option>
-            <option value="temp">🌡️ Температура</option>
-            <option value="pressure">📊 Давление</option>
-            <option value="humidity">💧 Влажность</option>
-            <option value="turbulence">🌪️ Турбулентность</option>
-        </select>
-        <div id="layerLegend" style="margin-top: 6px; font-size: 9px; color: rgba(0,0,0,0.6);">
-            🟢 Низкий 🟠 Средний 🔴 Высокий
+
+        <!-- Правая панель -->
+        <div class="side-panel">
+            <!-- Шапка -->
+            <div class="panel-header">
+                <div class="panel-title">
+                    <i class="fas fa-cloud-sun"></i>
+                    <div>
+                        <div style="font-size: 18px; font-weight: 700; color: white;">МИРА</div>
+                        <div style="font-size: 11px; color: rgba(255,255,255,0.9);">Метеорологическая скоринг-система</div>
+                    </div>
+                </div>
+                <div class="panel-actions">
+                    <button class="panel-btn" onclick="DashboardModule.open()" title="Дашборд" id="dashboardBtn" disabled>
+                        <i class="fas fa-tachometer-alt"></i>
+                    </button>
+                    <button class="panel-btn" onclick="openSettings()" title="Настройки">
+                        <i class="fas fa-cog"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Контент -->
+            <div class="panel-content">
+                <!-- Кнопка Анализа -->
+                <div class="panel-section">
+                    <div class="panel-section-title">
+                        <i class="fas fa-cloud-showers-heavy"></i>
+                        <span>Анализ маршрута</span>
+                    </div>
+
+                    <!-- Дата и время анализа -->
+                    <div style="margin-bottom: 12px;">
+                        <label style="font-size: 11px; font-weight: 600; color: #4a5568; display: block; margin-bottom: 6px;">
+                            <i class="fas fa-calendar-alt" style="color: #667eea; width: 14px;"></i>
+                            Дата и время анализа
+                        </label>
+                        <input type="datetime-local" id="analysisDateTime" style="width: 100%; padding: 10px; border: 2px solid #e2e8f0; border-radius: 8px; font-size: 14px; font-weight: 600; color: #2d3748; background: #f7fafc;">
+                    </div>
+
+                    <button class="action-btn" id="analyzeBtn" onclick="analyzeRoute()" disabled>
+                        <i class="fas fa-search"></i>
+                        <span>Анализ</span>
+                    </button>
+                </div>
+
+                <!-- Список маршрутов -->
+                <div class="panel-section">
+                    <div class="panel-section-title">
+                        <i class="fas fa-route"></i>
+                        <span>Маршруты</span>
+                    </div>
+                    <div id="routesList" style="max-height: 200px; overflow-y: auto;">
+                        <div style="font-size: 13px; color: #718096; text-align: center; padding: 10px;">
+                            Нет загруженных маршрутов
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Загрузка KML -->
+                <div class="panel-section">
+                    <div class="panel-section-title">
+                        <i class="fas fa-folder-open"></i>
+                        <span>Загрузка маршрута</span>
+                    </div>
+                    <button class="action-btn secondary" onclick="document.getElementById('kmlInput').click()">
+                        <i class="fas fa-file-import"></i>
+                        <span>Выбрать KML файл</span>
+                    </button>
+                    <input type="file" id="kmlInput" accept=".kml" style="display: none;" onchange="handleKmlUpload(event)">
+                    <div id="kmlFileName" style="margin-top: 8px; font-size: 12px; color: #718096;"></div>
+                </div>
+
+                <!-- Создание маршрута по 2 точкам -->
+                <div class="panel-section">
+                    <div class="panel-section-title" onclick="toggleRouteCreator()" style="cursor: pointer;">
+                        <i class="fas fa-map-marked-alt"></i>
+                        <span>Создать маршрут (2 точки)</span>
+                        <i class="fas fa-chevron-down" id="routeCreatorIcon" style="margin-left: auto; transition: transform 0.3s;"></i>
+                    </div>
+                    <div id="routeCreatorContent" style="display: none;">
+                        <div class="input-row">
+                            <input type="text" id="point1Lat" placeholder="Широта точки A" readonly>
+                            <input type="text" id="point1Lon" placeholder="Долгота точки A" readonly>
+                        </div>
+                        <div class="input-row">
+                            <input type="text" id="point2Lat" placeholder="Широта точки B" readonly>
+                            <input type="text" id="point2Lon" placeholder="Долгота точки B" readonly>
+                        </div>
+                        <button class="action-btn secondary" onclick="enableRouteCreation()" id="addPointBtn">
+                            <i class="fas fa-map-marker-alt"></i>
+                            <span>Добавить точку на карте</span>
+                        </button>
+                        <button class="action-btn" onclick="createRouteFromPoints()" id="createRouteBtn" disabled style="margin-top: 8px;">
+                            <i class="fas fa-route"></i>
+                            <span>Создать маршрут</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Информация о маршруте -->
+                <div class="panel-section" id="routeInfo" style="display: none;">
+                    <div class="panel-section-title">
+                        <i class="fas fa-route"></i>
+                        <span>Маршрут</span>
+                    </div>
+                    <div style="font-size: 13px; color: #4a5568;">
+                        <div><strong>Название:</strong> <span id="routeName">—</span></div>
+                        <div><strong>Дистанция:</strong> <span id="routeDistance">—</span> км</div>
+                        <div><strong>Сегментов:</strong> <span id="routeSegments">—</span></div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -66,507 +719,1062 @@
         <span id="toastMessage"></span>
     </div>
 
-    <!-- Кнопка открытия панели -->
-    <div class="panel-toggle hidden" id="panelToggle" onclick="togglePanel()">
-        <div class="panel-toggle-text">
-            <i class="fas fa-chevron-up"></i>
-            <span>Метео-панель</span>
+    <!-- Модальное окно загрузки -->
+    <div class="modal" id="loadingModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 10000; justify-content: center; align-items: center;">
+        <div class="modal-content" style="max-width: 550px; background: white; color: #2d3748; border-radius: 20px; margin: 20px; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
+            <div class="modal-body" style="padding: 40px 30px; text-align: center;">
+                <!-- Самолёт и облака -->
+                <div style="position: relative; height: 80px; margin-bottom: 25px; overflow: hidden;">
+                    <!-- Облака -->
+                    <div class="cloud" style="position: absolute; top: 10px; left: -60px; font-size: 40px; opacity: 0.8;">☁️</div>
+                    <div class="cloud" style="position: absolute; top: 30px; left: -30px; font-size: 35px; opacity: 0.6;">☁️</div>
+                    <div class="cloud" style="position: absolute; top: 15px; left: -10px; font-size: 38px; opacity: 0.7;">☁️</div>
+                    
+                    <!-- Самолёт -->
+                    <div class="airplane" style="position: absolute; top: 25px; left: -70px; font-size: 50px;">✈️</div>
+                </div>
+                
+                <div style="font-size: 16px; font-weight: 700; margin-bottom: 8px; color: #2d3748;">
+                    Получение и анализ метеоданных...
+                </div>
+                
+                <!-- Прогресс бар -->
+                <div style="margin-top: 20px; margin-bottom: 15px;">
+                    <div style="width: 100%; height: 6px; background: #e2e8f0; border-radius: 3px; overflow: hidden;">
+                        <div id="loadingProgress" style="width: 0%; height: 100%; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); transition: width 0.3s ease;"></div>
+                    </div>
+                    <div style="font-size: 12px; color: #718096; margin-top: 8px;">
+                        <span id="loadingCurrent">0</span> из <span id="loadingTotal">0</span> маршрутов
+                    </div>
+                </div>
+                
+                <!-- Список маршрутов -->
+                <div id="loadingRoutesList" style="max-height: 200px; overflow-y: auto; text-align: left; margin-top: 15px;">
+                    <!-- Заполняется через JS -->
+                </div>
+            </div>
         </div>
-        <i class="fas fa-chevron-down" id="panelToggleIcon" style="color: #38a169; font-size: 16px;"></i>
     </div>
 
-    <!-- Нижнее меню (основная панель) -->
-    <div class="bottom-panel" id="mainPanel">
-        <div class="panel-header">
-            <div class="panel-title">
-                <i class="fas fa-cloud-sun"></i>
-                <span>MIRA</span>
+    <style>
+        @keyframes planeFly {
+            0% {
+                transform: translateX(-100px) scaleX(1);
+            }
+            100% {
+                transform: translateX(400px) scaleX(1);
+            }
+        }
+        
+        @keyframes cloudMove {
+            0% {
+                transform: translateX(0);
+            }
+            100% {
+                transform: translateX(400px);
+            }
+        }
+        
+        @keyframes loadingBar {
+            0% {
+                transform: translateX(-100%);
+            }
+            100% {
+                transform: translateX(100%);
+            }
+        }
+        
+        .airplane {
+            animation: planeFly 2.5s infinite linear;
+        }
+        
+        .cloud:nth-child(1) {
+            animation: cloudMove 4s infinite linear;
+        }
+        
+        .cloud:nth-child(2) {
+            animation: cloudMove 5s infinite linear;
+            animation-delay: 0.5s;
+        }
+        
+        .cloud:nth-child(3) {
+            animation: cloudMove 4.5s infinite linear;
+            animation-delay: 1s;
+        }
+        
+        /* Аккордеон скоринга */
+        .scoring-accordion {
+            margin: 20px 0;
+        }
+        
+        .scoring-accordion-item {
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            overflow: hidden;
+            background: white;
+        }
+        
+        .scoring-accordion-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 14px 16px;
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
+            cursor: pointer;
+            transition: background 0.2s;
+            font-weight: 600;
+            color: #2d3748;
+        }
+        
+        .scoring-accordion-header:hover {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+        }
+        
+        .scoring-accordion-header i {
+            transition: transform 0.3s;
+            color: #667eea;
+        }
+        
+        .scoring-accordion-content {
+            padding: 16px;
+            background: #f7fafc;
+            border-top: 1px solid #e2e8f0;
+        }
+        
+        #factorsIcon.rotated {
+            transform: rotate(180deg);
+        }
+    </style>
+
+    <!-- Модальное окно: Настройки пороговых значений -->
+    <div class="settings-modal" id="settingsModal">
+        <div class="settings-modal-content">
+            <div class="settings-modal-header">
+                <h3><i class="fas fa-cog"></i> Настройки пороговых значений</h3>
+                <button class="settings-close-modal" onclick="closeSettings()" title="Закрыть">
+                    <i class="fas fa-times"></i>
+                </button>
             </div>
-            <div class="panel-handle"></div>
-            <div class="panel-actions">
-                <button class="panel-btn" onclick="toggleRouteMode()" title="Построить маршрут">
-                    <i class="fas fa-route"></i>
+            <div class="settings-modal-body">
+                <div class="settings-grid">
+                    <div class="setting-item">
+                        <label class="setting-label" for="setting_windGround">
+                            <i class="fas fa-wind"></i> Ветер у земли (м/с)
+                        </label>
+                        <input type="number" id="setting_windGround" class="setting-input" value="10" step="0.5" min="0" max="50">
+                    </div>
+                    <div class="setting-item">
+                        <label class="setting-label" for="setting_windAlt">
+                            <i class="fas fa-wind"></i> Ветер на высоте (м/с)
+                        </label>
+                        <input type="number" id="setting_windAlt" class="setting-input" value="15" step="0.5" min="0" max="100">
+                    </div>
+                    <div class="setting-item">
+                        <label class="setting-label" for="setting_visibility">
+                            <i class="fas fa-eye"></i> Видимость (км)
+                        </label>
+                        <input type="number" id="setting_visibility" class="setting-input" value="2" step="0.5" min="0.1" max="50">
+                    </div>
+                    <div class="setting-item">
+                        <label class="setting-label" for="setting_precip">
+                            <i class="fas fa-cloud-rain"></i> Осадки (мм/ч)
+                        </label>
+                        <input type="number" id="setting_precip" class="setting-input" value="1.4" step="0.1" min="0" max="50">
+                    </div>
+                    <div class="setting-item">
+                        <label class="setting-label" for="setting_tempMin">
+                            <i class="fas fa-thermometer-half"></i> Температура мин (°C)
+                        </label>
+                        <input type="number" id="setting_tempMin" class="setting-input" value="-40" step="1" min="-60" max="0">
+                    </div>
+                    <div class="setting-item">
+                        <label class="setting-label" for="setting_tempMax">
+                            <i class="fas fa-thermometer-full"></i> Температура макс (°C)
+                        </label>
+                        <input type="number" id="setting_tempMax" class="setting-input" value="40" step="1" min="0" max="60">
+                    </div>
+                    <div class="setting-item">
+                        <label class="setting-label" for="setting_cloudCeiling">
+                            <i class="fas fa-cloud"></i> НГО мин (м)
+                        </label>
+                        <input type="number" id="setting_cloudCeiling" class="setting-input" value="250" step="50" min="0" max="3000">
+                    </div>
+                    <div class="setting-item">
+                        <label class="setting-label" for="setting_humidityIcing">
+                            <i class="fas fa-snowflake"></i> Влажность (%)
+                        </label>
+                        <input type="number" id="setting_humidityIcing" class="setting-input" value="85" step="5" min="0" max="100">
+                    </div>
+                </div>
+            </div>
+            <div class="settings-modal-footer">
+                <button class="settings-save-btn" onclick="saveSettings()">
+                    <i class="fas fa-save"></i> Сохранить
                 </button>
-                <button class="panel-btn" onclick="toggleRiskZones()" title="Зоны риска вкл/выкл" id="riskZonesBtn">
-                    <i class="fas fa-bullseye"></i>
+                <button class="settings-cancel-btn" onclick="closeSettings()">
+                    <i class="fas fa-times"></i> Отмена
                 </button>
-                <button class="panel-btn" onclick="exportReport()" title="Экспорт отчёта">
-                    <i class="fas fa-file-pdf"></i>
+            </div>
+        </div>
+    </div>
+
+    <!-- Модальное окно ДАШБОРДА -->
+    <div id="dashboardModal" class="dashboard-modal">
+        <div class="dashboard-modal-header">
+            <div class="dashboard-modal-title">
+                <h1>
+                    <i class="fas fa-tachometer-alt"></i>
+                    <div class="dashboard-title-text">
+                        <div class="dashboard-title-main" style="color: white;">МИРА</div>
+                        <div class="dashboard-title-sub" style="color: rgba(255,255,255,0.9);">Метеорологическая скоринг-система</div>
+                    </div>
+                </h1>
+            </div>
+            <div class="dashboard-modal-actions">
+                <button class="dashboard-back-btn" onclick="DashboardModule.close()" title="Назад к карте">
+                    <i class="fas fa-arrow-left"></i> Назад к карте
                 </button>
-                <button class="panel-btn" onclick="openSettings()" title="Настройки">
-                    <i class="fas fa-cog"></i>
-                </button>
-                <button class="panel-btn close-btn" onclick="togglePanel()" title="Закрыть">
+                <button class="dashboard-modal-close" onclick="DashboardModule.close()" title="Закрыть">
                     <i class="fas fa-times"></i>
                 </button>
             </div>
         </div>
 
-        <!-- Шаги мастера (Wizard) -->
-        <div class="wizard-steps" id="wizardSteps">
+        <div class="dashboard-modal-tabs" id="dashboardTabs">
             <!-- Генерируется через JS -->
         </div>
 
-        <!-- Вкладки -->
-        <div class="tabs" id="mainTabs">
-            <div class="tab active" onclick="switchTab('overview')">Обзор</div>
-            <div class="tab" onclick="switchTab('report')">Отчёт</div>
-            <div class="tab" onclick="switchTab('charts')">Графики</div>
-            <div class="tab" onclick="switchTab('details')">Детали</div>
-        </div>
-
-        <div class="panel-content">
-            <!-- Заголовок для печати -->
-            <div class="print-header" id="printHeader">
-                <h1 style="color: #2d3748; font-size: 24px; margin-bottom: 8px;">MIRA</h1>
-                <p style="color: #718096; font-size: 14px;">Отчёт о метеоусловиях и анализе рисков</p>
-                <p style="color: rgba(0,0,0,0.5); font-size: 12px;" id="printDateTime"></p>
-            </div>
-
-            <!-- Контент мастера (Wizard) -->
-            <div id="wizardContent" style="display: none;">
-                <!-- Генерируется через JS -->
-            </div>
-
-            <!-- Основной контент -->
-            <div id="mainContent">
-                <!-- Вкладка: Обзор -->
-                <div class="tab-content active" id="tab-overview">
-                    <!-- Координаты -->
-                    <div class="coords-row">
-                        <input type="text" class="coord-input" id="latInput" placeholder="Широта" readonly>
-                        <input type="text" class="coord-input" id="lonInput" placeholder="Долгота" readonly>
-                    </div>
-
-                    <!-- Статус маршрута -->
-                    <div id="routeStatusBlock" style="display: none; margin-bottom: 14px;">
-                        <div class="route-status-block">
-                            <div class="route-header">
-                                <span class="route-title">
-                                    <i class="fas fa-route"></i> Маршрут
-                                </span>
-                                <div class="route-actions">
-                                    <button class="route-btn" onclick="optimizeCurrentRoute()" title="Оптимизировать маршрут">
-                                        <i class="fas fa-magic"></i>
-                                    </button>
-                                    <button class="route-btn" onclick="analyzeRoute()" title="Анализировать маршрут">
-                                        <i class="fas fa-search"></i>
-                                    </button>
-                                    <button class="route-btn" onclick="clearRoute()" title="Очистить маршрут">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
-                                </div>
-                            </div>
-                            <div class="route-info">
-                                <div><strong>Точка A:</strong> <span id="routePointA">—</span></div>
-                                <div><strong>Точка B:</strong> <span id="routePointB">—</span></div>
-                            </div>
-                            <div class="route-badges">
-                                <span class="badge badge-ok" id="routeDistance">0 км</span>
-                                <span class="badge badge-ok" id="routeFlightTime">0 мин</span>
-                                <span class="badge" id="routeRiskLevel" style="background: rgba(56, 161, 105, 0.2); color: #276749;">Анализ...</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Кнопка Анализа -->
-                    <div style="display: flex; gap: 10px; margin-bottom: 14px;">
-                        <button class="action-btn" id="getWeatherBtn" onclick="getWeather()" style="flex: 1;">
-                            <i class="fas fa-cloud-showers-heavy"></i>
-                            <span>Анализ</span>
-                        </button>
-                        <button class="action-btn" onclick="openPilotChecklist()" id="pilotBtn" style="width: 50px; padding: 0; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, rgba(56, 161, 105, 0.8) 0%, rgba(38, 166, 154, 0.8) 100%);" title="Сидя на земле">
-                            <i class="fas fa-flag" style="font-size: 18px;"></i>
-                        </button>
-                    </div>
-
-                    <!-- Статус полёта -->
-                    <div class="flight-status status-allowed" id="flightStatus">
-                        <i class="fas fa-check-circle"></i>
-                        <span>ПОЛЁТ РАЗРЕШЁН</span>
-                    </div>
-
-                    <!-- Параметры -->
-                    <div class="params-grid">
-                        <div class="param-card">
-                            <i class="fas fa-wind"></i>
-                            <span class="value" id="wind10m">6.2</span>
-                            <span class="label">Ветер 10м</span>
-                            <span class="badge badge-ok" id="badgeWind10m">OK</span>
-                        </div>
-                        <div class="param-card">
-                            <i class="fas fa-wind"></i>
-                            <span class="value" id="wind500m">12.1</span>
-                            <span class="label">Ветер 500м</span>
-                            <span class="badge badge-ok" id="badgeWind500m">OK</span>
-                        </div>
-                        <div class="param-card">
-                            <i class="fas fa-eye"></i>
-                            <span class="value" id="visibility">&gt;5</span>
-                            <span class="label">Видимость</span>
-                            <span class="badge badge-ok" id="badgeVisibility">OK</span>
-                        </div>
-                        <div class="param-card">
-                            <i class="fas fa-thermometer-half"></i>
-                            <span class="value" id="temp">+5°</span>
-                            <span class="label">Температура</span>
-                            <span class="badge badge-ok" id="badgeTemp">OK</span>
-                        </div>
-                        <div class="param-card">
-                            <i class="fas fa-cloud-rain"></i>
-                            <span class="value" id="precip">0.0</span>
-                            <span class="label">Осадки</span>
-                            <span class="badge badge-ok" id="badgePrecip">OK</span>
-                        </div>
-                        <div class="param-card">
-                            <i class="fas fa-snowflake"></i>
-                            <span class="value" id="icing">НИЗ</span>
-                            <span class="label">Обледенение</span>
-                            <span class="badge badge-ok" id="badgeIcing">OK</span>
-                        </div>
-                    </div>
-
-                    <!-- Временные окна -->
-                    <div style="margin-bottom: 14px;">
-                        <div style="color: rgba(255,255,255,0.6); font-size: 12px; margin-bottom: 8px;">
-                            <i class="fas fa-clock"></i> Окна для полёта (24ч)
-                        </div>
-                        <div class="flight-windows" id="flightWindows"></div>
-                    </div>
-                </div>
-
-                <!-- Вкладка: Отчёт -->
-                <div class="tab-content" id="tab-report">
-                    <!-- Пагинация -->
-                    <div class="report-pagination">
-                        <button id="reportPage1Btn" onclick="switchReportPage(1)" class="report-page-btn active">
-                            <i class="fas fa-clipboard-list"></i> Анализ и рекомендации
-                        </button>
-                        <button id="reportPage2Btn" onclick="switchReportPage(2)" class="report-page-btn">
-                            <i class="fas fa-flag-checkered"></i> С учётом корректировки
-                        </button>
-                    </div>
-
-                    <!-- Страница 1: Анализ и рекомендации -->
-                    <div id="reportPage1">
-                        <div class="recommendations-block" id="recommendationsBlock">
-                            <div class="recommendations-header">
-                                <i class="fas fa-clipboard-list"></i>
-                                <span>Анализ и рекомендации</span>
-                            </div>
-                            <div class="recommendations-content" id="recommendationsContent">
-                                <div class="recommendation-placeholder">
-                                    <i class="fas fa-info-circle"></i>
-                                    <span>Нажмите «Анализ» для получения данных</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Страница 2: С учётом корректировки -->
-                    <div id="reportPage2" style="display: none;">
-                        <div style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%); border-radius: 10px; padding: 12px; margin-bottom: 14px; border: 1px solid rgba(102, 126, 234, 0.2);">
-                            <div style="font-size: 11px; color: #2d3748; font-weight: 600;">
-                                <i class="fas fa-info-circle" style="color: #667eea;"></i> Данные скорректированы по фактическим данным с точки старта
-                            </div>
-                        </div>
-                        <div id="correctedReportContent">
-                            <div class="recommendation-placeholder">
-                                <i class="fas fa-flag"></i>
-                                <span>Введите данные в «Сидя на земле» для коррекции прогноза</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Вкладка: Графики -->
-                <div class="tab-content" id="tab-charts">
-                    <div style="margin-bottom: 14px;">
-                        <div style="font-size: 12px; font-weight: 600; color: #2d3748; margin-bottom: 8px;">
-                            <i class="fas fa-chart-line"></i> Временной ряд метеопараметров
-                        </div>
-                        <div class="chart-container loading" id="timeSeriesChart">
-                            <div class="chart-skeleton"></div>
-                        </div>
-                    </div>
-                    <div style="margin-bottom: 14px;">
-                        <div style="font-size: 12px; font-weight: 600; color: #2d3748; margin-bottom: 8px;">
-                            <i class="fas fa-compass"></i> Роза ветров
-                        </div>
-                        <div class="chart-container loading" id="windRoseChart">
-                            <div class="chart-skeleton"></div>
-                        </div>
-                    </div>
-                    <div style="margin-bottom: 14px;">
-                        <div style="font-size: 12px; font-weight: 600; color: #2d3748; margin-bottom: 8px;">
-                            <i class="fas fa-wave-square"></i> Индекс турбулентности
-                        </div>
-                        <div class="chart-container loading" id="turbulenceChart">
-                            <div class="chart-skeleton"></div>
-                        </div>
-                    </div>
-                    <div style="margin-bottom: 14px;">
-                        <div style="font-size: 12px; font-weight: 600; color: #2d3748; margin-bottom: 8px;">
-                            <i class="fas fa-cloud"></i> Высота нижней границы облаков
-                        </div>
-                        <div class="chart-container loading" id="ceilingChart">
-                            <div class="chart-skeleton"></div>
-                        </div>
-                    </div>
-                    <div style="margin-bottom: 14px;">
-                        <div style="font-size: 12px; font-weight: 600; color: #2d3748; margin-bottom: 8px;">
-                            <i class="fas fa-calendar-alt"></i> Тепловая карта полётных окон
-                        </div>
-                        <div class="chart-container loading" id="flightWindowsChart">
-                            <div class="chart-skeleton"></div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Вкладка: Детали -->
-                <div class="tab-content" id="tab-details">
-                    <table class="data-table" id="detailedTable">
-                        <thead>
-                            <tr>
-                                <th>Время</th>
-                                <th>Статус</th>
-                                <th>Высоты</th>
-                                <th>Ветер (м/с)</th>
-                                <th>Осадки (мм/ч)</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tableBody"></tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Модальное окно: Чек-лист пилота -->
-    <div class="modal" id="pilotChecklistModal">
-        <div class="modal-content" style="max-width: 600px; max-height: 85vh; overflow-y: auto;">
-            <div class="modal-header">
-                <h3><i class="fas fa-flag"></i> Сидя на земле</h3>
-                <button class="close-modal" onclick="closePilotChecklist()">&times;</button>
-            </div>
-            <div class="modal-body" style="max-height: calc(85vh - 60px); overflow-y: auto; padding-right: 5px;">
-                <div style="background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%); border-radius: 10px; padding: 12px; margin-bottom: 16px; border: 1px solid rgba(102, 126, 234, 0.2);">
-                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
-                        <div style="font-size: 11px; color: #2d3748; font-weight: 600;">
-                            <i class="fas fa-info-circle" style="color: #667eea;"></i> Точка старта
-                        </div>
-                        <button id="selectPointBtn" onclick="toggleSelectPointMode()" style="padding: 6px 12px; border: 1px solid rgba(102, 126, 234, 0.3); border-radius: 6px; background: rgba(102, 126, 234, 0.15); color: #667eea; font-size: 10px; cursor: pointer; display: flex; align-items: center; gap: 4px;">
-                            <i class="fas fa-map-marker-alt"></i> <span>На карте</span>
-                        </button>
-                    </div>
-                    <div style="font-size: 10px; color: rgba(0,0,0,0.5);">
-                        Укажите координаты точки старта для привязки данных
-                    </div>
-                </div>
-
-                <!-- Поля координат -->
-                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px;">
-                    <div>
-                        <label style="font-size: 9px; color: rgba(0,0,0,0.6); text-transform: uppercase; font-weight: 600;"><i class="fas fa-map-marker-alt"></i> Широта</label>
-                        <input type="text" id="pilotLat" class="coord-input" placeholder="55.7558" style="width: 100%; margin-top: 4px; font-size: 13px; font-family: monospace;">
-                    </div>
-                    <div>
-                        <label style="font-size: 9px; color: rgba(0,0,0,0.6); text-transform: uppercase; font-weight: 600;"><i class="fas fa-map-marker-alt"></i> Долгота</label>
-                        <input type="text" id="pilotLon" class="coord-input" placeholder="37.6173" style="width: 100%; margin-top: 4px; font-size: 13px; font-family: monospace;">
-                    </div>
-                </div>
-
-                <!-- Кнопка геолокации -->
-                <div style="margin-bottom: 14px;">
-                    <button class="action-btn" onclick="fillPilotCoordsFromLocation()" style="width: 100%; background: linear-gradient(135deg, rgba(56, 161, 105, 0.8) 0%, rgba(38, 166, 154, 0.8) 100%);">
-                        <i class="fas fa-location-crosshairs"></i> <span>Моё местоположение</span>
-                    </button>
-                </div>
-
-                <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-bottom: 14px;">
-                    <div style="background: rgba(0,0,0,0.03); border-radius: 8px; padding: 10px;">
-                        <label style="font-size: 9px; color: rgba(0,0,0,0.6); text-transform: uppercase; font-weight: 600;"><i class="fas fa-wind"></i> Ветер (м/с)</label>
-                        <input type="number" id="pilotWindSpeed" class="coord-input" placeholder="0.0" step="0.1" min="0" max="50" style="width: 100%; margin-top: 4px; font-size: 14px; font-weight: 600;">
-                    </div>
-                    <div style="background: rgba(0,0,0,0.03); border-radius: 8px; padding: 10px;">
-                        <label style="font-size: 9px; color: rgba(0,0,0,0.6); text-transform: uppercase; font-weight: 600;"><i class="fas fa-compass"></i> Направление (°)</label>
-                        <input type="number" id="pilotWindDir" class="coord-input" placeholder="0–360" step="1" min="0" max="360" style="width: 100%; margin-top: 4px; font-size: 14px; font-weight: 600;">
-                    </div>
-                    <div style="background: rgba(0,0,0,0.03); border-radius: 8px; padding: 10px;">
-                        <label style="font-size: 9px; color: rgba(0,0,0,0.6); text-transform: uppercase; font-weight: 600;"><i class="fas fa-thermometer-half"></i> Температура (°C)</label>
-                        <input type="number" id="pilotTemp" class="coord-input" placeholder="+0.0" step="0.1" min="-40" max="50" style="width: 100%; margin-top: 4px; font-size: 14px; font-weight: 600;">
-                    </div>
-                    <div style="background: rgba(0,0,0,0.03); border-radius: 8px; padding: 10px;">
-                        <label style="font-size: 9px; color: rgba(0,0,0,0.6); text-transform: uppercase; font-weight: 600;"><i class="fas fa-tint"></i> Влажность (%)</label>
-                        <input type="number" id="pilotHumidity" class="coord-input" placeholder="0" step="1" min="0" max="100" style="width: 100%; margin-top: 4px; font-size: 14px; font-weight: 600;">
-                    </div>
-                    <div style="background: rgba(0,0,0,0.03); border-radius: 8px; padding: 10px;">
-                        <label style="font-size: 9px; color: rgba(0,0,0,0.6); text-transform: uppercase; font-weight: 600;"><i class="fas fa-eye"></i> Видимость (км)</label>
-                        <input type="number" id="pilotVisibility" class="coord-input" placeholder=">5" step="0.1" min="0.1" max="10" style="width: 100%; margin-top: 4px; font-size: 14px; font-weight: 600;">
-                    </div>
-                    <div style="background: rgba(0,0,0,0.03); border-radius: 8px; padding: 10px;">
-                        <label style="font-size: 9px; color: rgba(0,0,0,0.6); text-transform: uppercase; font-weight: 600;"><i class="fas fa-cloud"></i> Облака (м)</label>
-                        <input type="number" id="pilotCloudBase" class="coord-input" placeholder="0" step="50" min="0" max="5000" style="width: 100%; margin-top: 4px; font-size: 14px; font-weight: 600;">
-                    </div>
-                </div>
-
-                <div style="display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 14px;">
-                    <label style="display: flex; align-items: center; gap: 6px; padding: 8px 12px; background: rgba(0,0,0,0.03); border-radius: 6px; cursor: pointer; font-size: 11px;">
-                        <input type="checkbox" id="pilotFog" style="width: 16px; height: 16px;">
-                        <span><i class="fas fa-smog"></i> Туман</span>
-                    </label>
-                    <label style="display: flex; align-items: center; gap: 6px; padding: 8px 12px; background: rgba(0,0,0,0.03); border-radius: 6px; cursor: pointer; font-size: 11px;">
-                        <input type="checkbox" id="pilotPrecip" style="width: 16px; height: 16px;">
-                        <span><i class="fas fa-cloud-rain"></i> Осадки</span>
-                    </label>
-                </div>
-
-                <div style="display: flex; gap: 10px;">
-                    <button class="action-btn" onclick="applyPilotCorrection()" style="flex: 1;">
-                        <i class="fas fa-check"></i> <span>Применить коррекцию</span>
-                    </button>
-                    <button class="action-btn" onclick="clearPilotData()" style="width: 56px; background: linear-gradient(135deg, rgba(237, 137, 54, 0.8) 0%, rgba(237, 137, 54, 0.6) 100%);">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </div>
-
-                <!-- Блок сравнения -->
-                <div id="pilotComparisonBlock" style="display: none; margin-top: 20px;">
-                    <div style="font-size: 13px; font-weight: 600; color: #2d3748; margin-bottom: 12px;">
-                        <i class="fas fa-balance-scale"></i> Сравнение прогноза и факта
-                    </div>
-                    <table class="data-table" style="margin-bottom: 16px;">
-                        <thead>
-                            <tr>
-                                <th>Параметр</th>
-                                <th>Прогноз</th>
-                                <th>Факт</th>
-                                <th>Коррекция</th>
-                            </tr>
-                        </thead>
-                        <tbody id="pilotComparisonTable"></tbody>
-                    </table>
-                </div>
-
-                <!-- Блок решения -->
-                <div id="pilotDecisionBlock" style="display: none; margin-top: 20px;">
-                    <div style="font-size: 13px; font-weight: 600; color: #2d3748; margin-bottom: 12px;">
-                        <i class="fas fa-gavel"></i> Решение
-                    </div>
-                    <div class="flight-status status-allowed" id="pilotFinalStatus">
-                        <i class="fas fa-check-circle"></i>
-                        <span>ПОЛЁТ РАЗРЕШЁН</span>
-                    </div>
-                    <div style="margin-top: 12px; font-size: 12px; color: rgba(0,0,0,0.6);">
-                        <strong>Макс. высота:</strong> <span id="pilotMaxAltitude" style="font-weight: 600; color: #2d3748;">550 м</span>
-                    </div>
-                    <div id="pilotRecommendations" style="margin-top: 12px;"></div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Модальное окно: Настройки -->
-    <div class="modal" id="settingsModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3><i class="fas fa-cog"></i> Настройки порогов</h3>
-                <button class="close-modal" onclick="document.getElementById('settingsModal').classList.remove('active')">&times;</button>
-            </div>
-            <div class="modal-body">
-                <div class="setting-row">
-                    <label>Ветер у земли (м/с)</label>
-                    <input type="number" id="setting_windGround" value="10" step="0.5">
-                </div>
-                <div class="setting-row">
-                    <label>Ветер на высоте (м/с)</label>
-                    <input type="number" id="setting_windAlt" value="15" step="0.5">
-                </div>
-                <div class="setting-row">
-                    <label>Видимость (км)</label>
-                    <input type="number" id="setting_visibility" value="2" step="0.5">
-                </div>
-                <div class="setting-row">
-                    <label>Осадки (мм/ч)</label>
-                    <input type="number" id="setting_precip" value="1.4" step="0.1">
-                </div>
-                <div class="setting-row">
-                    <label>Влажность для обледенения (%)</label>
-                    <input type="number" id="setting_humidityIcing" value="80" step="5">
-                </div>
-                <div style="margin-top: 20px;">
-                    <button class="action-btn" onclick="saveSettings()">
-                        <i class="fas fa-save"></i> Сохранить
-                    </button>
-                </div>
-            </div>
+        <div class="dashboard-modal-body" id="dashboardBody">
+            <!-- Контент вкладок -->
         </div>
     </div>
 
     <!-- JS Модули -->
-    <script src="js/utils.js"></script>
-    <script src="js/storage.js"></script>
-    <script src="js/map.js"></script>
-    <script src="js/weather.js?v=20260227"></script>
-    <script src="js/charts.js"></script>
-    <script src="js/route.js?v=20260226"></script>
-    <script src="js/energy-model.js?v=20260226"></script>
-    <script src="js/metno.js?v=20260226"></script>
-    <script src="js/energy-charts.js"></script>
-    <script src="js/pilot.js"></script>
-    <script src="js/pilot-observations.js"></script>
-    <script src="js/pdf-export.js"></script>
-    <script src="js/pdf-export-2page.js?v=2026022717"></script>
-    <script src="js/wizard.js?v=20260226"></script>
-    <script src="js/app.js?v=20260227"></script>
+    <script src="js/utils.js?v=20260301"></script>
+    <script src="js/storage.js?v=20260301"></script>
+    <script src="js/map.js?v=2026030310"></script>
+    <script src="js/weather.js?v=2026030333"></script>
+    <script src="js/charts.js?v=20260301"></script>
+    <script src="js/route.js?v=2026030329"></script>
+    <script src="js/energy-model.js?v=20260301"></script>
+    <script src="js/metno.js?v=20260301"></script>
+    <script src="js/energy-charts.js?v=20260301"></script>
+    <script src="js/wizard.js?v=2026030315"></script>
+    <script src="js/pilot.js?v=20260301"></script>
+    <script src="js/pilot-observations.js?v=20260301"></script>
+    <script src="js/pdf-export.js?v=20260301"></script>
+    <script src="js/pdf-export-2page.js?v=2026030318"></script>
+    <script src="js/app.js?v=2026030320"></script>
+    <script src="js/scoring.js?v=2026030333"></script>
+
+    <!-- Модуль дашборда -->
+    <script src="js/modules/dashboard/dashboard.js?v=20260301"></script>
+    <script src="js/modules/dashboard/tabs/meteo-tab.js?v=2026030223"></script>
+    <script src="js/modules/dashboard/tabs/ground-tab.js?v=20260301"></script>
+    <script src="js/modules/dashboard/tabs/flight-tab.js?v=20260301"></script>
+    <script src="js/modules/dashboard/tabs/segments-tab.js?v=2026030220"></script>
+    <script src="js/modules/dashboard/tabs/energy-tab.js?v=2026030225"></script>
+    <script src="js/modules/dashboard/tabs/report-tab.js?v=2026030332"></script>
 
     <script>
-        // Переключение панели
-        function togglePanel() {
-            const panel = document.querySelector('.bottom-panel');
-            const toggle = document.getElementById('panelToggle');
+        let routeCreationMode = false;
+        let routePoints = [];
+
+        // Обработка загрузки KML
+        function handleKmlUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            document.getElementById('kmlFileName').textContent = file.name;
+
+            if (typeof RouteModule !== 'undefined' && RouteModule.importKML) {
+                RouteModule.importKML(file).then(route => {
+                    if (route) {
+                        // Устанавливаем текущий маршрут
+                        RouteModule.currentRoute = route;
+                        
+                        showToast(`Маршрут "${route.name}" загружен`, 'success');
+                        updateRouteInfo(route);
+                        // Активируем кнопку Анализа
+                        document.getElementById('analyzeBtn').disabled = false;
+                        // Активируем кнопку Дашборда
+                        document.getElementById('dashboardBtn').disabled = false;
+                        // Обновляем список маршрутов
+                        renderRoutesList();
+                        // Отображаем маршрут на карте
+                        displayRouteOnMap(route);
+                    } else {
+                        showToast('Ошибка загрузки маршрута', 'error');
+                    }
+                }).catch(error => {
+                    showToast('Ошибка: ' + error.message, 'error');
+                });
+            } else {
+                showToast('RouteModule не загружен', 'error');
+            }
+
+            event.target.value = '';
+        }
+
+        // Включение режима добавления точек
+        function enableRouteCreation() {
+            routeCreationMode = true;
+            routePoints = [];
+            showToast('Кликните по карте для установки точки A', 'info');
+            document.getElementById('addPointBtn').innerHTML = '<i class="fas fa-check"></i><span>Режим добавления точек</span>';
+        }
+
+        // Создание маршрута из 2 точек
+        function createRouteFromPoints() {
+            if (routePoints.length < 2) {
+                showToast('Добавьте 2 точки на карте', 'error');
+                return;
+            }
+
+            const route = {
+                id: 'route-' + Date.now(),
+                name: 'Маршрут по точкам',
+                points: routePoints,
+                createdAt: new Date().toISOString()
+            };
+
+            if (typeof RouteModule !== 'undefined') {
+                RouteModule.currentRoute = route;
+                RouteModule.createSegments(route);
+                RouteModule.saveRoute(route);
+
+                updateRouteInfo(route);
+                document.getElementById('analyzeBtn').disabled = false;
+                document.getElementById('dashboardBtn').disabled = false;
+
+                showToast('Маршрут создан', 'success');
+                
+                // Отображаем маршрут на карте
+                displayRouteOnMap(route);
+                
+                // Обновляем список маршрутов
+                renderRoutesList();
+            }
+
+            // Сброс режима
+            routeCreationMode = false;
+            routePoints = [];
+            document.getElementById('addPointBtn').innerHTML = '<i class="fas fa-map-marker-alt"></i><span>Добавить точку на карте</span>';
+            document.getElementById('point1Lat').value = '';
+            document.getElementById('point1Lon').value = '';
+            document.getElementById('point2Lat').value = '';
+            document.getElementById('point2Lon').value = '';
+        }
+
+        // Обновление информации о маршруте
+        function updateRouteInfo(route) {
+            document.getElementById('routeInfo').style.display = 'block';
+            document.getElementById('routeName').textContent = route.name;
+            document.getElementById('routeDistance').textContent = route.distance?.toFixed(1) || '—';
+            document.getElementById('routeSegments').textContent = RouteModule.segments?.length || 0;
+        }
+
+        // Отображение списка маршрутов
+        function renderRoutesList() {
+            const routesList = document.getElementById('routesList');
+            const routes = Storage.getSavedRoutes();
+
+            if (!routes || routes.length === 0) {
+                routesList.innerHTML = '<div style="font-size: 13px; color: #718096; text-align: center; padding: 10px;">Нет загруженных маршрутов</div>';
+                return;
+            }
+
+            routesList.innerHTML = routes.map(route => `
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: #f7fafc; border-radius: 8px; margin-bottom: 8px;">
+                    <div style="flex: 1;">
+                        <div style="font-size: 13px; font-weight: 600; color: #2d3748;">${route.name}</div>
+                        <div style="font-size: 11px; color: #718096;">${route.distance?.toFixed(1) || '—'} км</div>
+                    </div>
+                    <div style="display: flex; gap: 6px;">
+                        <button class="panel-btn" onclick="selectRoute('${route.id}')" title="Выбрать" style="width: 32px; height: 32px; background: rgba(102, 126, 234, 0.2); color: #667eea;">
+                            <i class="fas fa-check" style="font-size: 14px;"></i>
+                        </button>
+                        <button class="panel-btn" onclick="deleteRoute('${route.id}')" title="Удалить" style="width: 32px; height: 32px; background: rgba(229, 62, 62, 0.2); color: #e53e3e;">
+                            <i class="fas fa-trash" style="font-size: 14px;"></i>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Выбор маршрута
+        function selectRoute(routeId) {
+            const route = Storage.getRouteById(routeId);
+            if (route) {
+                RouteModule.loadRoute(routeId);
+                RouteModule.currentRoute = route;
+                updateRouteInfo(route);
+                document.getElementById('analyzeBtn').disabled = false;
+                document.getElementById('dashboardBtn').disabled = false;
+                showToast(`Маршрут "${route.name}" выбран`, 'success');
+                
+                // Отображаем маршрут на карте
+                displayRouteOnMap(route);
+            }
+        }
+
+        // Отображение маршрута на карте
+        function displayRouteOnMap(route) {
+            if (typeof MapModule === 'undefined' || !MapModule.map) return;
             
-            if (panel.classList.contains('hidden')) {
-                panel.classList.remove('hidden');
-                toggle.classList.add('hidden');
+            // Очищаем предыдущие маршруты
+            if (MapModule.routeSource) {
+                MapModule.routeSource.clear();
             } else {
-                panel.classList.add('hidden');
-                toggle.classList.remove('hidden');
+                // Создаём источник для маршрутов
+                MapModule.routeSource = new ol.source.Vector();
+                const routeLayer = new ol.layer.Vector({
+                    source: MapModule.routeSource,
+                    style: new ol.style.Style({
+                        stroke: new ol.style.Stroke({
+                            color: '#667eea',
+                            width: 4
+                        })
+                    }),
+                    zIndex: 100
+                });
+                MapModule.map.addLayer(routeLayer);
+            }
+            
+            // Рисуем линию маршрута по точкам
+            if (route.points && route.points.length > 0) {
+                const coordinates = route.points.map(p => 
+                    ol.proj.fromLonLat([p.lon, p.lat])
+                );
+                
+                const lineString = new ol.geom.LineString(coordinates);
+                const feature = new ol.Feature(lineString);
+                
+                MapModule.routeSource.addFeature(feature);
+                
+                // Центрируем карту на маршруте
+                const extent = lineString.getExtent();
+                MapModule.map.getView().fit(extent, {
+                    padding: [50, 50, 50, 50],
+                    duration: 500
+                });
             }
         }
 
-        // Переключение страницы отчёта
-        function switchReportPage(page) {
-            const page1 = document.getElementById('reportPage1');
-            const page2 = document.getElementById('reportPage2');
-            const btn1 = document.getElementById('reportPage1Btn');
-            const btn2 = document.getElementById('reportPage2Btn');
-
-            if (page === 1) {
-                page1.style.display = 'block';
-                page2.style.display = 'none';
-                btn1.classList.add('active');
-                btn2.classList.remove('active');
-            } else {
-                page1.style.display = 'none';
-                page2.style.display = 'block';
-                btn1.classList.remove('active');
-                btn2.classList.add('active');
+        // Удаление маршрута
+        function deleteRoute(routeId) {
+            if (confirm('Удалить этот маршрут?')) {
+                RouteModule.deleteRoute(routeId);
+                renderRoutesList();
+                showToast('Маршрут удалён', 'success');
+                
+                // Если это был последний маршрут, отключаем кнопки
+                const routes = Storage.getSavedRoutes();
+                if (routes.length === 0) {
+                    document.getElementById('analyzeBtn').disabled = true;
+                    document.getElementById('dashboardBtn').disabled = true;
+                    document.getElementById('routeInfo').style.display = 'none';
+                }
             }
         }
 
-        // Переключатель слоёв
-        function changeWeatherLayer() {
-            const select = document.getElementById('weatherLayerSelect');
-            const value = select.value;
-            Utils.log(`Слой переключен: ${value}`);
+        // Анализ всех маршрутов
+        async function analyzeRoute() {
+            // Получаем все маршруты
+            const routes = Storage.getSavedRoutes();
+
+            if (!routes || routes.length === 0) {
+                showToast('Нет маршрутов для анализа', 'error');
+                return;
+            }
+
+            // Получаем дату и время анализа
+            const analysisDateTime = document.getElementById('analysisDateTime').value;
+            if (!analysisDateTime) {
+                showToast('Выберите дату и время анализа', 'error');
+                return;
+            }
+            
+            // Показываем модальное окно
+            const loadingModal = document.getElementById('loadingModal');
+            const loadingRoutesList = document.getElementById('loadingRoutesList');
+            const loadingProgress = document.getElementById('loadingProgress');
+            const loadingCurrent = document.getElementById('loadingCurrent');
+            const loadingTotal = document.getElementById('loadingTotal');
+            
+            // Инициализируем прогресс
+            loadingTotal.textContent = routes.length;
+            loadingCurrent.textContent = '0';
+            loadingProgress.style.width = '0%';
+            
+            // Генерируем список маршрутов
+            loadingRoutesList.innerHTML = routes.map((route, index) => `
+                <div id="route-status-${index}" style="display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: #f7fafc; border-radius: 8px; margin-bottom: 6px; font-size: 13px;">
+                    <div style="width: 20px; height: 20px; border-radius: 50%; background: #e2e8f0; display: flex; align-items: center; justify-content: center; font-size: 11px; color: #718096;">
+                        ${index + 1}
+                    </div>
+                    <div style="flex: 1; color: #2d3748; font-weight: 500;">${route.name}</div>
+                    <div class="route-status-text" style="color: #718096; font-size: 12px;">Ожидание...</div>
+                </div>
+            `).join('');
+            
+            if (loadingModal) {
+                loadingModal.style.display = 'flex';
+                loadingModal.classList.add('active');
+            }
+            
+            // Анализируем каждый маршрут
+            for (let i = 0; i < routes.length; i++) {
+                const route = routes[i];
+                const statusElement = document.getElementById(`route-status-${i}`);
+                const statusText = statusElement?.querySelector('.route-status-text');
+                
+                // Обновляем статус текущего маршрута
+                if (statusText) {
+                    statusText.textContent = 'Загрузка...';
+                    statusText.style.color = '#667eea';
+                }
+                
+                try {
+                    // Загружаем маршрут
+                    RouteModule.loadRoute(route.id);
+                    RouteModule.currentRoute = route;
+
+                    // Анализируем сегменты с выбранной датой
+                    await RouteModule.analyzeSegments(analysisDateTime);
+                    
+                    // Сохраняем данные
+                    if (typeof WizardModule !== 'undefined') {
+                        WizardModule.stepData.route = route;
+                        WizardModule.stepData.segments = RouteModule.segments;
+                        WizardModule.stepData.segmentAnalysis = RouteModule.segmentAnalysis;
+                    }
+                    
+                    // Обновляем статус
+                    if (statusText) {
+                        statusText.textContent = '✓ Готово';
+                        statusText.style.color = '#38a169';
+                        statusElement.style.background = '#c6f6d5';
+                    }
+                    
+                    // Обновляем прогресс
+                    loadingCurrent.textContent = (i + 1).toString();
+                    loadingProgress.style.width = `${((i + 1) / routes.length) * 100}%`;
+                    
+                } catch (error) {
+                    console.error(`Ошибка анализа маршрута ${route.name}:`, error);
+                    if (statusText) {
+                        statusText.textContent = '✗ Ошибка';
+                        statusText.style.color = '#e53e3e';
+                        statusElement.style.background = '#fed7d7';
+                    }
+                }
+            }
+            
+            // Задержка перед закрытием
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            // Закрываем модальное окно загрузки
+            if (loadingModal) {
+                loadingModal.classList.remove('active');
+                setTimeout(() => {
+                    loadingModal.style.display = 'none';
+                }, 300);
+            }
+
+            // Показываем модальное окно скоринга
+            setTimeout(() => {
+                if (typeof ScoringModuleUI !== 'undefined') {
+                    ScoringModuleUI.showForFirstHour();
+                }
+            }, 500);
+
+            showToast(`Проанализировано ${routes.length} маршрутов`, 'success');
+        }
+
+        // Переключение аккордеона создания маршрута
+        function toggleRouteCreator() {
+            const content = document.getElementById('routeCreatorContent');
+            const icon = document.getElementById('routeCreatorIcon');
+            
+            if (content.style.display === 'none') {
+                content.style.display = 'block';
+                icon.style.transform = 'rotate(180deg)';
+            } else {
+                content.style.display = 'none';
+                icon.style.transform = 'rotate(0deg)';
+            }
+        }
+
+        // Настройки
+        function openSettings() {
+            const modal = document.getElementById('settingsModal');
+            if (modal) {
+                const thresholds = Storage.getThresholds();
+                Object.entries(thresholds).forEach(([key, value]) => {
+                    const input = document.getElementById(`setting_${key}`);
+                    if (input) input.value = value;
+                });
+                modal.classList.add('active');
+            }
+        }
+
+        function closeSettings() {
+            const modal = document.getElementById('settingsModal');
+            if (modal) modal.classList.remove('active');
+        }
+
+        function saveSettings() {
+            const thresholds = {
+                windGround: parseFloat(document.getElementById('setting_windGround')?.value) || 10,
+                windAlt: parseFloat(document.getElementById('setting_windAlt')?.value) || 15,
+                visibility: parseFloat(document.getElementById('setting_visibility')?.value) || 2,
+                precip: parseFloat(document.getElementById('setting_precip')?.value) || 1.4,
+                tempMin: parseFloat(document.getElementById('setting_tempMin')?.value) || -40,
+                tempMax: parseFloat(document.getElementById('setting_tempMax')?.value) || 40,
+                cloudCeiling: parseFloat(document.getElementById('setting_cloudCeiling')?.value) || 250,
+                humidityIcing: parseFloat(document.getElementById('setting_humidityIcing')?.value) || 85
+            };
+
+            Storage.saveThresholds(thresholds);
+            showToast('Настройки сохранены', 'success');
+            closeSettings();
+        }
+
+        // Обработка клика по карте для добавления точек
+        function setupMapClickHandler() {
+            if (typeof MapModule !== 'undefined' && MapModule.map) {
+                MapModule.map.on('click', function(event) {
+                    if (routeCreationMode && routePoints.length < 2) {
+                        const coord = event.coordinate;
+                        routePoints.push({ lat: coord[1], lon: coord[0] });
+
+                        const pointNum = routePoints.length;
+                        const pointName = pointNum === 1 ? 'A' : 'B';
+
+                        document.getElementById(`point${pointNum}Lat`).value = coord[1].toFixed(6);
+                        document.getElementById(`point${pointNum}Lon`).value = coord[0].toFixed(6);
+
+                        showToast(`Точка ${pointName} установлена`, 'success');
+
+                        if (routePoints.length === 2) {
+                            document.getElementById('createRouteBtn').disabled = false;
+                            routeCreationMode = false;
+                            document.getElementById('addPointBtn').innerHTML = '<i class="fas fa-map-marker-alt"></i><span>Добавить точку на карте</span>';
+                            showToast('Маршрут готов к созданию', 'success');
+                        } else {
+                            showToast('Кликните по карте для установки точки B', 'info');
+                        }
+                    }
+                });
+            }
         }
 
         // Инициализация при загрузке
         document.addEventListener('DOMContentLoaded', () => {
-            // Показываем панель при загрузке
-            document.querySelector('.bottom-panel').classList.remove('hidden');
+            App.init({ isDesktop: true });
+            setTimeout(() => {
+                setupMapClickHandler();
+                renderRoutesList();
+
+                // Устанавливаем дату и время по умолчанию (завтра 00:00)
+                const tomorrow = new Date();
+                tomorrow.setDate(tomorrow.getDate() + 1);
+                tomorrow.setHours(0, 0, 0, 0);
+                
+                // Форматируем в локальном формате для datetime-local
+                const year = tomorrow.getFullYear();
+                const month = String(tomorrow.getMonth() + 1).padStart(2, '0');
+                const day = String(tomorrow.getDate()).padStart(2, '0');
+                const hours = String(tomorrow.getHours()).padStart(2, '0');
+                const minutes = String(tomorrow.getMinutes()).padStart(2, '0');
+                const dateTimeStr = `${year}-${month}-${day}T${hours}:${minutes}`;
+                
+                const dateTimeInput = document.getElementById('analysisDateTime');
+                if (dateTimeInput) {
+                    dateTimeInput.value = dateTimeStr;
+                    console.log('📅 Дата анализа установлена:', dateTimeStr);
+                }
+
+                // Активируем кнопку Анализ, если есть маршруты
+                const routes = Storage.getSavedRoutes();
+                if (routes && routes.length > 0) {
+                    document.getElementById('analyzeBtn').disabled = false;
+                    document.getElementById('dashboardBtn').disabled = false;
+
+                    // Выбираем первый маршрут для отображения на карте
+                    const firstRoute = routes[0];
+                    RouteModule.currentRoute = firstRoute;
+                }
+            }, 500);
         });
+    </script>
+
+    <!-- Модальное окно СКОРИНГА -->
+    <div class="scoring-modal" id="scoringModal">
+        <div class="scoring-modal-content">
+            <div class="scoring-modal-header">
+                <h3><i class="fas fa-chart-bar"></i> Интегральная Оценка</h3>
+                <button class="scoring-close-btn" onclick="ScoringModuleUI.close()" title="Закрыть">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="scoring-modal-body">
+                <!-- Основной индикатор -->
+                <div class="scoring-main-indicator">
+                    <div class="score-circle-wrapper">
+                        <div class="score-circle" id="scoreCircle">
+                            <div class="score-circle-inner">
+                                <span class="score-value" id="scoreValue">0.0</span>
+                                <span class="score-max">из 10</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="score-status" id="scoreStatus">
+                        <span class="score-status-icon">✅</span>
+                        <span class="score-status-text">Полёт разрешён</span>
+                    </div>
+                </div>
+
+                <!-- Аккордеон с параметрами -->
+                <div class="scoring-accordion">
+                    <div class="scoring-accordion-item">
+                        <div class="scoring-accordion-header" onclick="ScoringModuleUI.toggleAccordion('factors')">
+                            <span><i class="fas fa-list-ul"></i> Параметры</span>
+                            <i class="fas fa-chevron-down" id="factorsIcon"></i>
+                        </div>
+                        <div class="scoring-accordion-content" id="factorsContent" style="display: none;">
+                            <div class="scoring-factor">
+                                <div class="scoring-factor-header">
+                                    <span class="scoring-factor-icon"><i class="fas fa-wind"></i></span>
+                                    <span class="scoring-factor-name">Ветер</span>
+                                    <span class="scoring-factor-value" id="factorWindValue">0.0</span>
+                                </div>
+                                <div class="scoring-factor-bar">
+                                    <div class="scoring-factor-fill" id="factorWindFill" style="width: 0%;"></div>
+                                </div>
+                            </div>
+
+                            <div class="scoring-factor">
+                                <div class="scoring-factor-header">
+                                    <span class="scoring-factor-icon"><i class="fas fa-cloud-rain"></i></span>
+                                    <span class="scoring-factor-name">Осадки</span>
+                                    <span class="scoring-factor-value" id="factorPrecipValue">0.0</span>
+                                </div>
+                                <div class="scoring-factor-bar">
+                                    <div class="scoring-factor-fill" id="factorPrecipFill" style="width: 0%;"></div>
+                                </div>
+                            </div>
+
+                            <div class="scoring-factor">
+                                <div class="scoring-factor-header">
+                                    <span class="scoring-factor-icon"><i class="fas fa-eye"></i></span>
+                                    <span class="scoring-factor-name">Видимость</span>
+                                    <span class="scoring-factor-value" id="factorVisibilityValue">0.0</span>
+                                </div>
+                                <div class="scoring-factor-bar">
+                                    <div class="scoring-factor-fill" id="factorVisibilityFill" style="width: 0%;"></div>
+                                </div>
+                            </div>
+
+                            <div class="scoring-factor">
+                                <div class="scoring-factor-header">
+                                    <span class="scoring-factor-icon"><i class="fas fa-thermometer-half"></i></span>
+                                    <span class="scoring-factor-name">Температура</span>
+                                    <span class="scoring-factor-value" id="factorTempValue">0.0</span>
+                                </div>
+                                <div class="scoring-factor-bar">
+                                    <div class="scoring-factor-fill" id="factorTempFill" style="width: 0%;"></div>
+                                </div>
+                            </div>
+
+                            <div class="scoring-factor">
+                                <div class="scoring-factor-header">
+                                    <span class="scoring-factor-icon"><i class="fas fa-snowflake"></i></span>
+                                    <span class="scoring-factor-name">Обледенение</span>
+                                    <span class="scoring-factor-value" id="factorIcingValue">0.0</span>
+                                </div>
+                                <div class="scoring-factor-bar">
+                                    <div class="scoring-factor-fill" id="factorIcingFill" style="width: 0%;"></div>
+                                </div>
+                            </div>
+
+                            <div class="scoring-factor">
+                                <div class="scoring-factor-header">
+                                    <span class="scoring-factor-icon"><i class="fas fa-wind"></i></span>
+                                    <span class="scoring-factor-name">Турбулентность</span>
+                                    <span class="scoring-factor-value" id="factorTurbulenceValue">0.0</span>
+                                </div>
+                                <div class="scoring-factor-bar">
+                                    <div class="scoring-factor-fill" id="factorTurbulenceFill" style="width: 0%;"></div>
+                                </div>
+                            </div>
+
+                            <div class="scoring-factor">
+                                <div class="scoring-factor-header">
+                                    <span class="scoring-factor-icon"><i class="fas fa-cloud"></i></span>
+                                    <span class="scoring-factor-name">Облачность</span>
+                                    <span class="scoring-factor-value" id="factorCloudValue">0.0</span>
+                                </div>
+                                <div class="scoring-factor-bar">
+                                    <div class="scoring-factor-fill" id="factorCloudFill" style="width: 0%;"></div>
+                                </div>
+                            </div>
+
+                            <div class="scoring-factor">
+                                <div class="scoring-factor-header">
+                                    <span class="scoring-factor-icon"><i class="fas fa-tachometer-alt"></i></span>
+                                    <span class="scoring-factor-name">Давление</span>
+                                    <span class="scoring-factor-value" id="factorPressureValue">0.0</span>
+                                </div>
+                                <div class="scoring-factor-bar">
+                                    <div class="scoring-factor-fill" id="factorPressureFill" style="width: 0%;"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Рекомендации -->
+                <div class="scoring-recommendations" id="scoringRecommendations">
+                    <!-- Заполняется через JS -->
+                </div>
+
+                <!-- Кнопки действий -->
+                <div class="scoring-modal-footer">
+                    <button class="scoring-btn scoring-btn-dashboard" onclick="ScoringModuleUI.goToDashboard()">
+                        <i class="fas fa-tachometer-alt"></i>
+                        Перейти на дашборд
+                    </button>
+                    <button class="scoring-btn scoring-btn-secondary" onclick="ScoringModuleUI.close()">
+                        <i class="fas fa-times"></i>
+                        Закрыть
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * UI модуль для отображения модального окна скоринга
+         */
+        const ScoringModuleUI = {
+            /**
+             * Открытие модального окна с данными скорин������а
+             * @param {Object} scoreData - Данные скоринга от ScoringModule
+             * @param {Object} weather - Данные погоды для рекомендаций
+             * @param {Array} hourlyData - Почасовые данные для рекомендаций (опционально)
+             */
+            open(scoreData, weather, hourlyData = null) {
+                const modal = document.getElementById('scoringModal');
+                if (!modal) return;
+
+                // Отрисовка основного индикатора
+                this.renderMainIndicator(scoreData);
+
+                // Отрисовка детализации по факторам
+                this.renderBreakdown(scoreData.breakdown);
+
+                // Генер��ция рекомендаций с почасовыми данными
+                this.renderRecommendations(scoreData, weather, hourlyData);
+
+                // Показ модального окна
+                modal.classList.add('active');
+                document.body.style.overflow = 'hidden';
+
+                console.log('✅ Модальное окно скоринга открыто, score:', scoreData.total);
+            },
+
+            /**
+             * Переключение аккордеона
+             */
+            toggleAccordion(id) {
+                const content = document.getElementById(id + 'Content');
+                const icon = document.getElementById(id + 'Icon');
+                
+                if (content && icon) {
+                    if (content.style.display === 'none') {
+                        content.style.display = 'block';
+                        icon.classList.add('rotated');
+                    } else {
+                        content.style.display = 'none';
+                        icon.classList.remove('rotated');
+                    }
+                }
+            },
+
+            /**
+             * Закрытие модального окна
+             */
+            close() {
+                const modal = document.getElementById('scoringModal');
+                if (!modal) return;
+
+                modal.classList.remove('active');
+                document.body.style.overflow = '';
+
+                console.log('❌ Модальное окно скоринга закрыто');
+            },
+
+            /**
+             * Переход на дашборд
+             */
+            goToDashboard() {
+                this.close();
+                setTimeout(() => {
+                    if (typeof DashboardModule !== 'undefined') {
+                        DashboardModule.open();
+                    }
+                }, 300);
+            },
+
+            /**
+             * Отрисовка основного индикатора
+             */
+            renderMainIndicator(scoreData) {
+                const circle = document.getElementById('scoreCircle');
+                const valueEl = document.getElementById('scoreValue');
+                const statusEl = document.getElementById('scoreStatus');
+
+                if (!circle || !valueEl || !statusEl) return;
+
+                // Значение скоринга
+                valueEl.textContent = scoreData.total.toFixed(1);
+
+                // Цвет и градиент круга
+                const percentage = (scoreData.total / 10) * 100;
+                circle.style.setProperty('--score-color', scoreData.color);
+                circle.style.background = `conic-gradient(${scoreData.color} ${percentage * 3.6}deg, rgba(0, 0, 0, 0.1) 0deg)`;
+
+                // Статус
+                const status = scoreData.status;
+                statusEl.className = `score-status ${status.class}`;
+                statusEl.innerHTML = `
+                    <span class="score-status-icon">${status.icon}</span>
+                    <span class="score-status-text">${status.text}</span>
+                `;
+            },
+
+            /**
+             * Отрисовка детализации по факторам
+             */
+            renderBreakdown(breakdown) {
+                const factors = {
+                    wind: { value: 'factorWindValue', fill: 'factorWindFill', max: 3 },
+                    precip: { value: 'factorPrecipValue', fill: 'factorPrecipFill', max: 3 },
+                    visibility: { value: 'factorVisibilityValue', fill: 'factorVisibilityFill', max: 3 },
+                    temp: { value: 'factorTempValue', fill: 'factorTempFill', max: 3 },
+                    icing: { value: 'factorIcingValue', fill: 'factorIcingFill', max: 3 },
+                    turbulence: { value: 'factorTurbulenceValue', fill: 'factorTurbulenceFill', max: 2.5 },
+                    cloud: { value: 'factorCloudValue', fill: 'factorCloudFill', max: 2 },
+                    pressure: { value: 'factorPressureValue', fill: 'factorPressureFill', max: 1.5 }
+                };
+
+                Object.entries(breakdown).forEach(([key, value]) => {
+                    const factor = factors[key];
+                    if (!factor) return;
+
+                    const valueEl = document.getElementById(factor.value);
+                    const fillEl = document.getElementById(factor.fill);
+
+                    if (valueEl) valueEl.textContent = value.toFixed(1);
+                    if (fillEl) {
+                        const percentage = (value / factor.max) * 100;
+                        fillEl.style.width = `${percentage}%`;
+
+                        // Цвет полоски в зависимости от значения
+                        if (value > factor.max * 0.8) {
+                            fillEl.style.background = '#e53e3e';
+                        } else if (value > factor.max * 0.5) {
+                            fillEl.style.background = '#ed8936';
+                        } else {
+                            fillEl.style.background = '#38a169';
+                        }
+                    }
+                });
+            },
+
+            /**
+             * Генерация рекомендаций
+             */
+            renderRecommendations(scoreData, weather, hourlyData = null) {
+                const container = document.getElementById('scoringRecommendations');
+                if (!container) return;
+
+                if (typeof ScoringModule === 'undefined') {
+                    container.innerHTML = '';
+                    return;
+                }
+
+                const recommendations = ScoringModule.generateRecommendations(
+                    scoreData,
+                    scoreData.breakdown,
+                    weather,
+                    hourlyData
+                );
+
+                if (recommendations.length === 0) {
+                    container.innerHTML = '';
+                    return;
+                }
+
+                container.innerHTML = `
+                    <h4 class="scoring-recommendations-title">
+                        <i class="fas fa-lightbulb"></i> Рекомендации
+                    </h4>
+                    ${recommendations.map(rec => `
+                        <div class="scoring-rec scoring-rec-${rec.type}">
+                            <i class="fas ${rec.icon || 'fa-info-circle'} scoring-rec-icon"></i>
+                            <span class="scoring-rec-text">${rec.text}</span>
+                        </div>
+                    `).join('')}
+                `;
+            },
+
+            /**
+             * Показать скоринг для первого часа прогноза
+             */
+            showForFirstHour() {
+                // Получаем данные анализа из routeAnalysisData или segmentAnalysis
+                let segmentAnalysis = null;
+                let firstHour = null;
+                let thresholds = Storage.getThresholds();
+                let hourlyData = null;
+
+                // Пробуем получить из текущего анализа сегментов
+                if (RouteModule?.segmentAnalysis && RouteModule.segmentAnalysis.length > 0) {
+                    // segmentAnalysis[0].analyzed.hourly — структура данных
+                    segmentAnalysis = RouteModule.segmentAnalysis[0];
+                }
+                // Если нет, пробуем получить из routeAnalysisData (первый маршрут)
+                else if (RouteModule?.routeAnalysisData) {
+                    const routeIds = Object.keys(RouteModule.routeAnalysisData);
+                    if (routeIds.length > 0) {
+                        const firstRouteData = RouteModule.routeAnalysisData[routeIds[0]];
+                        segmentAnalysis = firstRouteData?.segmentAnalysis?.[0];
+                    }
+                }
+
+                if (!segmentAnalysis || !segmentAnalysis.analyzed || !segmentAnalysis.analyzed.hourly || segmentAnalysis.analyzed.hourly.length === 0) {
+                    console.warn('⚠️ Нет данных анализа сегментов для скоринга');
+                    return;
+                }
+
+                hourlyData = segmentAnalysis.analyzed.hourly;
+                firstHour = hourlyData[0];
+
+                // Расчёт скоринга с учётом худших условий по всем часам
+                const scoreData = ScoringModule.calculateIntegralScore(
+                    { hour: firstHour, hourly: hourlyData, thresholds },
+                    { uavType: 'multicopter', category: 'LIGHT' },
+                    'visual'
+                );
+
+                // Открытие модального окна с почасовыми данными для рекомендаций
+                this.open(scoreData, { hour: firstHour, hourly: hourlyData, thresholds }, hourlyData);
+            }
+        };
     </script>
 </body>
 </html>

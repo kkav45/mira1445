@@ -1,23 +1,51 @@
 /**
- * Вкладка дашборда: ЭНЕРГОЭФФЕКТИВНОСТЬ 🔋
- * Расчёт энергопотребления и баланса
+ * Вкладка дашборда: ЭНЕРГОЭФФЕКТИВНОСТЬ 🔋 (ОБНОВЛЁННАЯ v0.6.0 — с поддержкой маршрутов)
+ * Расчёт энергопотребления и баланса для каждого маршрута
  */
 
 const DashboardTabsEnergy = {
+    /**
+     * Активный маршрут (для выбора маршрута)
+     */
+    activeRoute: 'all',  // 'all' или ID маршрута
+
     render() {
+        // Получаем маршруты из RouteModule
+        const routes = typeof RouteModule !== 'undefined' && RouteModule.savedRoutes
+            ? RouteModule.savedRoutes
+            : [];
+
+        // Получаем данные для активного маршрута
+        let segments = [];
+        let segmentAnalysis = [];
+        
+        if (this.activeRoute !== 'all' && RouteModule.routeAnalysisData?.[this.activeRoute]) {
+            // Используем сохранённые данные для конкретного маршрута
+            const routeData = RouteModule.routeAnalysisData[this.activeRoute];
+            segments = routeData.segments || [];
+            segmentAnalysis = routeData.segmentAnalysis || [];
+        } else {
+            // Используем текущие данные (для последнего проанализированного маршрута)
+            segments = typeof RouteModule !== 'undefined' && RouteModule.segments
+                ? RouteModule.segments
+                : [];
+            segmentAnalysis = typeof RouteModule !== 'undefined' && RouteModule.segmentAnalysis
+                ? RouteModule.segmentAnalysis
+                : [];
+        }
+
         // Проверяем наличие данных для расчёта энергии
-        const hasRoute = typeof RouteModule !== 'undefined' && RouteModule.segments && RouteModule.segments.length > 0;
-        const hasWeather = typeof WeatherModule !== 'undefined' && WeatherModule.cachedData;
-        const hasSegmentAnalysis = typeof RouteModule !== 'undefined' && RouteModule.segmentAnalysis && RouteModule.segmentAnalysis.length > 0;
+        const hasRoute = segments.length > 0;
+        const hasSegmentAnalysis = segmentAnalysis.length > 0;
 
         if (!hasRoute || !hasSegmentAnalysis) {
             return this.renderPlaceholder();
         }
 
         // Расчёт энергии
-        const energyData = this.calculateEnergy();
+        const energyData = this.calculateEnergy(segments, segmentAnalysis);
 
-        return this.renderContent(energyData);
+        return this.renderContent(energyData, routes);
     },
 
     renderPlaceholder() {
@@ -38,61 +66,105 @@ const DashboardTabsEnergy = {
     /**
      * Расчёт энергопотребления
      */
-    calculateEnergy() {
-        const segments = RouteModule.segments || [];
-        const segmentAnalysis = RouteModule.segmentAnalysis || [];
+    calculateEnergy(segments, segmentAnalysis) {
+        // Проверка данных
+        if (!segments || segments.length === 0) {
+            console.warn('⚠️ calculateEnergy: нет сегментов');
+            return {
+                totalDistance: 0,
+                totalEnergy: 0,
+                availableEnergy: 0,
+                reserve: 0,
+                maxDistance: 220,
+                maxTime: 220,
+                remainingDistance: 220,
+                remainingTime: 220,
+                segmentEnergies: []
+            };
+        }
 
-        // Профиль БВС (по умолчанию)
+        // Профиль БВС (обновлённый)
         const profile = {
             batteryCapacity: 39000,    // мА·ч (39 А·ч)
-            batteryVoltage: 25.4,      // В (6S LiPo)
-            cutoffVoltage: 16.8,       // В (отсечка)
+            batteryVoltage: 25.4,      // В (полный заряд 6S)
+            cutoffVoltage: 16.8,       // В (остановка двигателя)
+            reserveVoltage: 18.6,      // В (минимальный рабочий запас)
             cruiseSpeed: 69,           // км/ч
             basePower: 120,            // Вт
             dragCoefficient: 0.185,
             weight: 8500,              // г
-            minReserve: 0.25           // 25%
+            minReserve: 0.25,          // 25%
+            maxDistance: 220,          // км (ограничение безопасности)
+            maxTime: 220               // мин (ограничение безопасности)
         };
 
         // Расчёт доступной энергии
-        const avgVoltage = (profile.batteryVoltage + profile.cutoffVoltage) / 2; // 21.1 В
-        const availableEnergy = avgVoltage * profile.batteryCapacity / 1000 * 0.8; // 658 Вт·ч (80% DoD)
+        // 18.6В — минимальный рабочий запас (уже включает резерв)
+        // 16.8В — отсечка двигателя (физический предел, дальше не разрядится)
+        const avgVoltage = (profile.batteryVoltage + profile.reserveVoltage) / 2; // 22.0 В
+        const totalEnergyWh = avgVoltage * profile.batteryCapacity / 1000; // 858 Вт·ч
+        const usableEnergy = totalEnergyWh; // 858 Вт·ч (100% доступной энергии между 25.4В и 18.6В)
+        const reserveEnergy = 0; // Резерв уже учтён в 18.6В
 
         // Расчёт по сегментам
-        let totalDistance = 0;
+        // Учитываем ветер туда и обратно (разная путевая скорость)
+        let totalAxisDistance = 0;
         let totalEnergy = 0;
+        let totalTime = 0;
         let toEnergy = 0;
         let returnEnergy = 0;
         const segmentEnergies = [];
 
         segments.forEach((segment, i) => {
-            const analysis = segmentAnalysis[i];
+            const analysis = segmentAnalysis ? segmentAnalysis[i] : null;
             const hourly = analysis?.analyzed?.hourly || [];
             const firstHour = hourly[0] || {};
 
             const wind10m = firstHour.wind10m || firstHour.wind || 0;
             const windDir = firstHour.windDir || firstHour.wind_direction_10m || 0;
+            
+            // 📊 Логирование ветра для отладки
+            if (i === 0) {
+                console.log('🌬️ Ветер (сегмент 0):', {
+                    wind10m: wind10m,
+                    windDir: windDir,
+                    routeAngle: this.getRouteAngle(segment)
+                });
+            }
 
             // Угол между ветром и маршрутом
             const routeAngle = this.getRouteAngle(segment);
             const windAngle = windDir - routeAngle;
-            const headwind = -wind10m * Math.cos(windAngle * Math.PI / 180);
+            
+            // ТУДА: встречный/попутный ветер
+            const headwindTo = -wind10m * Math.cos(windAngle * Math.PI / 180);
+            const groundSpeedTo = profile.cruiseSpeed + headwindTo * 3.6;
+            
+            // ОБРАТНО: ветер меняет направление на 180°
+            const windAngleReturn = windDir - (routeAngle + 180);
+            const headwindReturn = -wind10m * Math.cos(windAngleReturn * Math.PI / 180);
+            const groundSpeedReturn = profile.cruiseSpeed + headwindReturn * 3.6;
 
-            // Путевая скорость
-            const groundSpeed = profile.cruiseSpeed + headwind * 3.6;
+            // Дистанция оси
+            const axisDistance = segment.distance || 5;
+            
+            // Время туда и обратно (×2.5 для полной дистанции)
+            const timeToHours = axisDistance / Math.max(30, groundSpeedTo);
+            const timeReturnHours = axisDistance / Math.max(30, groundSpeedReturn);
+            const timeHours = (timeToHours + timeReturnHours) * 1.25; // +25% манёвры
+            const timeMinutes = timeHours * 60;
 
-            // Время на сегменте
-            const distance = segment.distance || 5;
-            const timeHours = distance / Math.max(30, groundSpeed);
-
-            // Мощность (упрощённо)
-            const power = profile.basePower + 0.5 * Math.pow(Math.max(0, headwind * 3.6), 2);
+            // Мощность (упрощённо, среднее между туда и обратно)
+            const powerTo = profile.basePower + 0.5 * Math.pow(Math.max(0, headwindTo * 3.6), 2);
+            const powerReturn = profile.basePower + 0.5 * Math.pow(Math.max(0, headwindReturn * 3.6), 2);
+            const avgPower = (powerTo + powerReturn) / 2;
 
             // Энергия на сегменте
-            const energy = power * timeHours;
+            const energy = avgPower * timeHours;
 
-            totalDistance += distance;
+            totalAxisDistance += axisDistance;
             totalEnergy += energy;
+            totalTime += timeMinutes;
 
             if (i < segments.length / 2) {
                 toEnergy += energy;
@@ -102,50 +174,58 @@ const DashboardTabsEnergy = {
 
             segmentEnergies.push({
                 segment: i + 1,
-                distance: distance,
+                axisDistance: axisDistance,
+                totalDistance: axisDistance * 2.5,
                 wind: wind10m,
-                headwind: headwind,
-                groundSpeed: groundSpeed,
-                power: power,
+                headwindTo: headwindTo,
+                headwindReturn: headwindReturn,
+                groundSpeedTo: groundSpeedTo,
+                groundSpeedReturn: groundSpeedReturn,
+                power: avgPower,
                 energy: energy,
-                time: timeHours * 60
+                time: timeMinutes
             });
         });
 
-        // Резерв
-        const reserve = Math.max(0, Math.round((1 - totalEnergy / availableEnergy) * 100));
-        const status = reserve >= profile.minReserve * 100 ? 'allowed' : reserve >= 10 ? 'warning' : 'forbidden';
+        // Расчёт оставшегося расстояния и времени
+        const energyPerKm = totalAxisDistance > 0 ? totalEnergy / (totalAxisDistance * 2.5) : 3.0; // Вт·ч/км
+        const energyPerMin = totalTime > 0 ? totalEnergy / totalTime : 2.5; // Вт·ч/мин
 
-        // Расчёт оставшегося времени и дистанции
-        const remainingEnergy = availableEnergy - totalEnergy;
-        const avgPower = segmentEnergies.length > 0 
-            ? segmentEnergies.reduce((sum, s) => sum + s.power, 0) / segmentEnergies.length 
-            : profile.basePower;
-        const remainingTime = Math.round((remainingEnergy / avgPower) * 60); // минут
-        const remainingDistance = Math.round(remainingTime / 60 * profile.cruiseSpeed); // км
+        // Оставшаяся энергия
+        const remainingEnergy = usableEnergy - totalEnergy;
+
+        // Максимальное расстояние и время (ограничения безопасности)
+        const maxDistanceKm = profile.maxDistance;  // 220 км
+        const maxTimeMin = profile.maxTime;         // 220 мин
+
+        // Оставшееся расстояние и время (с учётом ограничений и энергии)
+        const remainingDistance = Math.max(0, Math.min(
+            maxDistanceKm - totalAxisDistance * 2.5,
+            remainingEnergy > 0 ? remainingEnergy / energyPerKm : 0
+        ));
+        const remainingTime = Math.max(0, Math.min(
+            maxTimeMin - totalTime,
+            remainingEnergy > 0 ? remainingEnergy / energyPerMin : 0
+        ));
 
         return {
-            status,
-            totalDistance: Math.round(totalDistance * 10) / 10,
-            totalTime: Math.round(totalDistance / profile.cruiseSpeed * 60),
+            totalDistance: Math.round(totalAxisDistance * 2.5 * 10) / 10,
             totalEnergy: Math.round(totalEnergy),
-            reserve,
-            availableEnergy: Math.round(availableEnergy),
-            remainingEnergy: Math.round(remainingEnergy),
-            remainingTime: remainingTime,
-            remainingDistance: remainingDistance,
-            to: {
-                energy: Math.round(toEnergy),
-                time: Math.round(toEnergy / totalEnergy * (totalDistance / profile.cruiseSpeed * 60)),
-                speed: Math.round(profile.cruiseSpeed - 5)
-            },
-            return: {
-                energy: Math.round(returnEnergy),
-                time: Math.round(returnEnergy / totalEnergy * (totalDistance / profile.cruiseSpeed * 60)),
-                speed: Math.round(profile.cruiseSpeed + 10)
-            },
-            segments: segmentEnergies,
-            profile
+            totalTime: Math.round(totalTime),
+            toEnergy: Math.round(toEnergy),
+            returnEnergy: Math.round(returnEnergy),
+            availableEnergy: Math.round(usableEnergy),
+            reserve: 0,  // Резерв уже учтён в 18.6В
+            reservePercent: 0,  // Резерв уже учтён в 18.6В
+            maxDistance: maxDistanceKm,
+            maxTime: maxTimeMin,
+            remainingDistance: Math.round(remainingDistance * 10) / 10,
+            remainingTime: Math.round(remainingTime),
+            energyPerKm: Math.round(energyPerKm * 10) / 10,
+            profile: profile,
+            segmentEnergies: segmentEnergies,
+            // Флаг: хватает ли энергии
+            energySufficient: totalEnergy <= usableEnergy
         };
     },
 
@@ -154,12 +234,34 @@ const DashboardTabsEnergy = {
         return 90;
     },
 
-    renderContent(data) {
-        const statusClass = data.status === 'allowed' ? 'allowed' : data.status === 'warning' ? 'warning' : 'forbidden';
-        const statusText = data.status === 'allowed' ? 'ПОЛЁТ РАЗРЕШЁН' : data.status === 'warning' ? 'ПОЛЁТ С ОГРАНИЧЕНИЯМИ' : 'ПОЛЁТ ЗАПРЕЩЁН';
-        const statusIcon = data.status === 'allowed' ? 'fa-check-circle' : data.status === 'warning' ? 'fa-exclamation-circle' : 'fa-times-circle';
+    renderContent(data, routes = []) {
+        // Определяем статус по доступной энергии (резерв уже учтён)
+        const statusClass = data.energySufficient ? 'allowed' : 'forbidden';
+        const statusText = data.energySufficient ? 'ПОЛЁТ РАЗРЕШЁН' : 'ЭНЕРГИИ НЕДОСТАТОЧНО';
+        const statusIcon = data.energySufficient ? 'fa-check-circle' : 'fa-exclamation-triangle';
+
+        // Генерируем вкладки для каждого маршрута
+        const routeTabs = routes.length > 0 ? `
+            <div class="dashboard-subtabs" style="margin: 20px 0; display: flex; gap: 8px; flex-wrap: wrap; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px;">
+                <button class="dashboard-subtab ${this.activeRoute === 'all' ? 'active' : ''}"
+                        onclick="DashboardTabsEnergy.setActiveRoute('all')">
+                    📊 Все маршруты
+                </button>
+                ${routes.map((route) => {
+                    const hasAnalysis = RouteModule.routeAnalysisData?.[route.id] ? '✅' : '⏳';
+                    return `
+                        <button class="dashboard-subtab ${this.activeRoute === route.id ? 'active' : ''}"
+                                onclick="DashboardTabsEnergy.setActiveRoute('${route.id}')">
+                            ${hasAnalysis} ${route.name}
+                        </button>
+                    `;
+                }).join('')}
+            </div>
+        ` : '';
 
         return `
+            ${routeTabs}
+
             <!-- Статус -->
             <div class="dashboard-card">
                 <div class="dashboard-card-title">
@@ -174,13 +276,13 @@ const DashboardTabsEnergy = {
                 <div class="dashboard-energy-cards">
                     <div class="dashboard-energy-card">
                         <div class="dashboard-energy-card-icon">🛤️</div>
-                        <div class="dashboard-energy-card-value">${data.totalDistance} км</div>
-                        <div class="dashboard-energy-card-label">Дистанция</div>
+                        <div class="dashboard-energy-card-value">${data.totalDistance} / ${data.maxDistance} км</div>
+                        <div class="dashboard-energy-card-label">Дистанция (макс.)</div>
                     </div>
                     <div class="dashboard-energy-card">
                         <div class="dashboard-energy-card-icon">⏱️</div>
-                        <div class="dashboard-energy-card-value">${data.totalTime} мин</div>
-                        <div class="dashboard-energy-card-label">Время</div>
+                        <div class="dashboard-energy-card-value">${data.totalTime} / ${data.maxTime} мин</div>
+                        <div class="dashboard-energy-card-label">Время (макс.)</div>
                     </div>
                     <div class="dashboard-energy-card">
                         <div class="dashboard-energy-card-icon">⚡</div>
@@ -189,33 +291,45 @@ const DashboardTabsEnergy = {
                     </div>
                     <div class="dashboard-energy-card">
                         <div class="dashboard-energy-card-icon">🔋</div>
-                        <div class="dashboard-energy-card-value">${data.reserve}%</div>
-                        <div class="dashboard-energy-card-label">Резерв</div>
+                        <div class="dashboard-energy-card-value">${Math.round(data.availableEnergy)} Вт·ч</div>
+                        <div class="dashboard-energy-card-label">Доступно (25.4В → 18.6В)</div>
                     </div>
                 </div>
 
-                <!-- Оставшееся время -->
+                <!-- Оставшееся время и расстояние -->
                 <div style="margin-top: 20px; padding: 15px; background: linear-gradient(135deg, rgba(56, 161, 105, 0.1) 0%, rgba(56, 161, 105, 0.05) 100%); border-radius: 12px; border: 2px solid rgba(56, 161, 105, 0.3);">
                     <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; text-align: center;">
                         <div>
-                            <div style="font-size: 10px; color: #718096; text-transform: uppercase; margin-bottom: 6px;">🔋 Оставшаяся энергия</div>
-                            <div style="font-size: 22px; font-weight: 700; color: #38a169;">${data.remainingEnergy} Вт·ч</div>
+                            <div style="font-size: 10px; color: #718096; text-transform: uppercase; margin-bottom: 6px;">⏱️ Осталось времени</div>
+                            <div style="font-size: 22px; font-weight: 700; color: ${data.energySufficient ? '#38a169' : '#e53e3e'};">${data.remainingTime} мин</div>
+                            <div style="font-size: 9px; color: #718096; margin-top: 4px;">(ограничение ${data.maxTime} мин)</div>
                         </div>
                         <div>
-                            <div style="font-size: 10px; color: #718096; text-transform: uppercase; margin-bottom: 6px;">⏱️ Можно ещё лететь</div>
-                            <div style="font-size: 22px; font-weight: 700; color: #38a169;">${data.remainingTime} мин</div>
+                            <div style="font-size: 10px; color: #718096; text-transform: uppercase; margin-bottom: 6px;">🛤️ Осталось км</div>
+                            <div style="font-size: 22px; font-weight: 700; color: ${data.energySufficient ? '#38a169' : '#e53e3e'};">${data.remainingDistance} км</div>
+                            <div style="font-size: 9px; color: #718096; margin-top: 4px;">(ограничение ${data.maxDistance} км)</div>
                         </div>
                         <div>
-                            <div style="font-size: 10px; color: #718096; text-transform: uppercase; margin-bottom: 6px;">🛤️ Дистанция</div>
-                            <div style="font-size: 22px; font-weight: 700; color: #38a169;">${data.remainingDistance} км</div>
+                            <div style="font-size: 10px; color: #718096; text-transform: uppercase; margin-bottom: 6px;">⚡ Расход</div>
+                            <div style="font-size: 22px; font-weight: 700; color: #38a169;">${data.energyPerKm} Вт·ч/км</div>
+                            <div style="font-size: 9px; color: #718096; margin-top: 4px;">с учётом ветра</div>
                         </div>
                     </div>
+                    ${!data.energySufficient ? `
+                    <div style="margin-top: 12px; padding: 12px; background: rgba(229, 62, 62, 0.1); border-radius: 8px; border: 1px solid rgba(229, 62, 62, 0.3);">
+                        <div style="font-size: 11px; color: #c53030; display: flex; align-items: center; gap: 6px;">
+                            <i class="fas fa-exclamation-triangle" style="color: #e53e3e;"></i>
+                            <span><strong>ВНИМАНИЕ:</strong> Энергии недостаточно для полного маршрута! Требуется ${data.totalEnergy} Вт·ч, доступно ${Math.round(data.availableEnergy)} Вт·ч. Рекомендуется сократить маршрут.</span>
+                        </div>
+                    </div>
+                    ` : `
                     <div style="margin-top: 12px; padding: 10px; background: rgba(56, 161, 105, 0.05); border-radius: 8px; border: 1px solid rgba(56, 161, 105, 0.2);">
                         <div style="font-size: 11px; color: #276749; display: flex; align-items: center; gap: 6px;">
-                            <i class="fas fa-info-circle" style="color: #38a169;"></i>
-                            <span>Достаточно энергии для полёта на другой маршрут в течение <strong>${data.remainingTime} мин</strong> (${data.remainingDistance} км)</span>
+                            <i class="fas fa-shield-alt" style="color: #38a169;"></i>
+                            <span>Резерв 18.6В уже учтён. Отсечка двигателя при 16.8В. Доступно <strong>${Math.round(data.availableEnergy)} Вт·ч</strong></span>
                         </div>
                     </div>
+                    `}
                 </div>
             </div>
 
@@ -226,8 +340,16 @@ const DashboardTabsEnergy = {
                     Баланс "Туда / Обратно"
                 </div>
                 <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px;">
-                    ${this.renderDirectionCard('Туда', data.to, 'fa-arrow-right')}
-                    ${this.renderDirectionCard('Обратно', data.return, 'fa-arrow-left')}
+                    ${this.renderDirectionCard('Туда', {
+                        energy: Math.round(data.toEnergy),
+                        time: Math.round(data.totalTime / 2),
+                        speed: 69
+                    }, 'fa-arrow-right')}
+                    ${this.renderDirectionCard('Обратно', {
+                        energy: Math.round(data.returnEnergy),
+                        time: Math.round(data.totalTime / 2),
+                        speed: 69
+                    }, 'fa-arrow-left')}
                 </div>
             </div>
 
@@ -269,7 +391,7 @@ const DashboardTabsEnergy = {
                     <i class="fas fa-list"></i>
                     Детализация по сегментам
                 </div>
-                ${this.renderSegmentEnergyTable(data.segments)}
+                ${this.renderSegmentEnergyTable(data.segmentEnergies)}
             </div>
         `;
     },
@@ -300,13 +422,17 @@ const DashboardTabsEnergy = {
     },
 
     renderSegmentEnergyTable(segments) {
+        if (!segments || segments.length === 0) {
+            return '<div style="padding: 20px; text-align: center; color: #718096;">Нет данных по сегментам</div>';
+        }
+
         const rows = segments.map(s => `
             <tr>
                 <td><strong>С${s.segment}</strong></td>
-                <td>${Math.round(s.distance)} км</td>
+                <td>${s.axisDistance} / ${s.totalDistance} км</td>
                 <td>${s.wind} м/с</td>
-                <td>${s.headwind > 0 ? '+' : ''}${Math.round(s.headwind * 10) / 10} м/с</td>
-                <td>${Math.round(s.groundSpeed)} км/ч</td>
+                <td>${s.headwindTo > 0 ? '+' : ''}${Math.round(s.headwindTo * 10) / 10} м/с</td>
+                <td>${Math.round(s.groundSpeedTo)} / ${Math.round(s.groundSpeedReturn)} км/ч</td>
                 <td>${Math.round(s.power)} Вт</td>
                 <td>${Math.round(s.energy)} Вт·ч</td>
                 <td>${Math.round(s.time)} мин</td>
@@ -318,10 +444,10 @@ const DashboardTabsEnergy = {
                 <thead>
                     <tr>
                         <th>Сегмент</th>
-                        <th>Дистанция</th>
+                        <th>Дистанция (ось / полная)</th>
                         <th>Ветер</th>
-                        <th>Встречный ветер</th>
-                        <th>Скорость</th>
+                        <th>Ветер туда / обратно</th>
+                        <th>Скорость туда / обратно</th>
                         <th>Мощность</th>
                         <th>Энергия</th>
                         <th>Время</th>
@@ -333,11 +459,45 @@ const DashboardTabsEnergy = {
     },
 
     afterRender() {
-        const hasRoute = typeof RouteModule !== 'undefined' && RouteModule.segments && RouteModule.segments.length > 0;
-        if (!hasRoute) return;
+        // Получаем данные для активного маршрута
+        let segments = [];
+        let segmentAnalysis = [];
 
-        const energyData = this.calculateEnergy();
+        if (this.activeRoute !== 'all' && RouteModule.routeAnalysisData?.[this.activeRoute]) {
+            // Используем сохранённые данные для конкретного маршрута
+            const routeData = RouteModule.routeAnalysisData[this.activeRoute];
+            segments = routeData.segments || [];
+            segmentAnalysis = routeData.segmentAnalysis || [];
+            console.log('📊 Energy: данные из routeAnalysisData:', routeData);
+        } else {
+            // Используем текущие данные
+            segments = typeof RouteModule !== 'undefined' && RouteModule.segments
+                ? RouteModule.segments
+                : [];
+            segmentAnalysis = typeof RouteModule !== 'undefined' && RouteModule.segmentAnalysis
+                ? RouteModule.segmentAnalysis
+                : [];
+            console.log('📊 Energy: текущие данные, segments:', segments.length, 'segmentAnalysis:', segmentAnalysis.length);
+        }
+
+        if (!segments || segments.length === 0) {
+            console.warn('⚠️ afterRender: нет сегментов');
+            return;
+        }
+
+        if (!segmentAnalysis || segmentAnalysis.length === 0) {
+            console.warn('⚠️ afterRender: нет segmentAnalysis, используем WizardModule.stepData');
+            // Пытаемся получить из WizardModule
+            if (typeof WizardModule !== 'undefined' && WizardModule.stepData?.segmentAnalysis) {
+                segmentAnalysis = WizardModule.stepData.segmentAnalysis;
+                console.log('📊 Energy: segmentAnalysis из WizardModule:', segmentAnalysis.length);
+            }
+        }
+
+        const energyData = this.calculateEnergy(segments, segmentAnalysis);
         if (!energyData) return;
+
+        console.log('📊 Energy: energyData рассчитана', energyData);
 
         setTimeout(() => {
             this.initCharts(energyData);
@@ -348,14 +508,27 @@ const DashboardTabsEnergy = {
         if (typeof Plotly === 'undefined') return;
 
         this.initEnergyBalanceChart(data);
-        this.initWindChart(data.segments);
-        this.initSpeedChart(data.segments);
-        this.initPowerChart(data.segments);
+        this.initWindChart(data.segmentEnergies);
+        this.initSpeedChart(data.segmentEnergies);
+        this.initPowerChart(data.segmentEnergies);
     },
 
     initEnergyBalanceChart(data) {
+        // Проверка данных
+        if (!data || !data.availableEnergy) {
+            console.warn('⚠️ initEnergyBalanceChart: нет данных');
+            return;
+        }
+
+        const profile = data.profile || { minReserve: 0.25 };
+        const reserve = data.reserve || 25;
+
         const trace = {
-            values: [data.totalEnergy, data.reserve * data.availableEnergy / 100, data.availableEnergy * data.profile.minReserve],
+            values: [
+                data.totalEnergy || 0,
+                reserve * data.availableEnergy / 100,
+                data.availableEnergy * profile.minReserve
+            ],
             labels: ['Потрачено', 'Резерв', 'Мин. резерв'],
             type: 'pie',
             marker: {
@@ -376,6 +549,8 @@ const DashboardTabsEnergy = {
     },
 
     initWindChart(segments) {
+        if (!segments || segments.length === 0) return;
+
         const trace = {
             x: segments.map(s => `С${s.segment}`),
             y: segments.map(s => s.wind),
@@ -398,34 +573,49 @@ const DashboardTabsEnergy = {
     },
 
     initSpeedChart(segments) {
-        const trace = {
+        if (!segments || segments.length === 0) return;
+
+        const trace1 = {
             x: segments.map(s => `С${s.segment}`),
-            y: segments.map(s => Math.round(s.groundSpeed)),
+            y: segments.map(s => Math.round(s.groundSpeedTo)),
+            name: 'Туда',
             type: 'scatter',
             mode: 'lines+markers',
-            line: { color: '#38a169', width: 3 }
+            line: { color: '#3b82f6', width: 3 }
+        };
+
+        const trace2 = {
+            x: segments.map(s => `С${s.segment}`),
+            y: segments.map(s => Math.round(s.groundSpeedReturn)),
+            name: 'Обратно',
+            type: 'scatter',
+            mode: 'lines+markers',
+            line: { color: '#ef4444', width: 3 }
         };
 
         const layout = {
             margin: { t: 20, b: 40, l: 40, r: 20 },
             height: 260,
             xaxis: { title: 'Сегмент' },
-            yaxis: { title: 'Скорость, км/ч' }
+            yaxis: { title: 'Скорость, км/ч' },
+            showlegend: true
         };
 
         const el = document.getElementById('dashboardEnergySpeedChart');
         if (el) {
-            Plotly.newPlot('dashboardEnergySpeedChart', [trace], layout, { responsive: true, displayModeBar: false });
+            Plotly.newPlot('dashboardEnergySpeedChart', [trace1, trace2], layout, { responsive: true, displayModeBar: false });
         }
     },
 
     initPowerChart(segments) {
+        if (!segments || segments.length === 0) return;
+
         const trace = {
             x: segments.map(s => `С${s.segment}`),
             y: segments.map(s => Math.round(s.power)),
             type: 'bar',
             marker: {
-                color: segments.map(s => s.headwind > 0 ? '#ef4444' : '#38a169')
+                color: segments.map(s => s.headwindTo > 0 ? '#ef4444' : '#38a169')
             }
         };
 
@@ -439,6 +629,18 @@ const DashboardTabsEnergy = {
         const el = document.getElementById('dashboardEnergyPowerChart');
         if (el) {
             Plotly.newPlot('dashboardEnergyPowerChart', [trace], layout, { responsive: true, displayModeBar: false });
+        }
+    },
+
+    /**
+     * Установка активного маршрута (НОВОЕ)
+     */
+    setActiveRoute(routeId) {
+        this.activeRoute = routeId;
+        const container = document.getElementById('dashboardBody');
+        if (container) {
+            container.innerHTML = this.render();
+            this.afterRender();
         }
     }
 };

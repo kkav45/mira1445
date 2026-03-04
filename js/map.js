@@ -52,8 +52,6 @@ const MapModule = {
         this.routeSource = new ol.source.Vector();
         this.markersSource = new ol.source.Vector();
         this.kmlSource = new ol.source.Vector();
-        this.riskZonesSource = new ol.source.Vector();
-        this.segmentsSource = new ol.source.Vector();
 
         const routeLayer = new ol.layer.Vector({
             source: this.routeSource,
@@ -69,24 +67,12 @@ const MapModule = {
             style: this.kmlStyle.bind(this)
         });
 
-        const riskZonesLayer = new ol.layer.Vector({
-            source: this.riskZonesSource,
-            style: this.riskZoneStyle.bind(this)
-        });
-
-        const segmentsLayer = new ol.layer.Vector({
-            source: this.segmentsSource,
-            style: this.segmentStyle.bind(this)
-        });
-
         // Сохраняем ссылки на слои
         this.layers = {
             base: { osm: osmLayer, satellite: satelliteLayer, terrain: terrainLayer },
             route: routeLayer,
             markers: markersLayer,
-            kml: kmlLayer,
-            riskZones: riskZonesLayer,
-            segments: segmentsLayer
+            kml: kmlLayer
         };
 
         // Представление карты
@@ -102,7 +88,7 @@ const MapModule = {
             target: targetElement,
             layers: [
                 osmLayer, satelliteLayer, terrainLayer,
-                kmlLayer, routeLayer, segmentsLayer, riskZonesLayer, markersLayer
+                kmlLayer, routeLayer, markersLayer
             ],
             view: this.view,
             controls: ol.control.defaults.defaults({
@@ -221,14 +207,15 @@ const MapModule = {
      * Стили для KML
      */
     kmlStyle(feature) {
+        const geometry = feature.getGeometry();
+        // Не отображаем отдельные точки, только линии
+        if (geometry.getType() === 'Point') {
+            return null;
+        }
         const style = new ol.style.Style({
             stroke: new ol.style.Stroke({
                 color: '#764ba2',
                 width: 3
-            }),
-            image: new ol.style.Circle({
-                radius: 6,
-                fill: new ol.style.Fill({ color: '#764ba2' })
             })
         });
         return style;
